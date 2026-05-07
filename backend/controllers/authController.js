@@ -2,6 +2,18 @@ const Usuario = require('../models/Usuario');
 const bcrypt = require('bcryptjs');
 const generateToken = require('../utils/generateToken');
 
+const isBcryptHash = (value) => typeof value === 'string' && /^\$2[aby]\$/.test(value);
+
+const verifyPassword = async (plainPassword, storedPassword) => {
+  if (!storedPassword) return false;
+
+  if (isBcryptHash(storedPassword)) {
+    return bcrypt.compare(plainPassword, storedPassword);
+  }
+
+  return plainPassword === storedPassword;
+};
+
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -10,31 +22,48 @@ const login = async (req, res) => {
       return res.status(400).json({ message: 'Faltan email o contraseña' });
     }
 
-    const usuario = await Usuario.findByEmail(email);
+    let usuario = await Usuario.findByEmailInIdentity(email);
+
     if (!usuario) {
-      return res.status(401).json({ message: 'Credenciales inválidas' });
+      const usuarioUta = await Usuario.findByEmailInUta(email);
+      if (!usuarioUta) {
+        return res.status(401).json({ message: 'Credenciales inválidas' });
+      }
+
+      const passwordValidaUta = await verifyPassword(password, usuarioUta.password);
+      if (!passwordValidaUta) {
+        return res.status(401).json({ message: 'Credenciales inválidas' });
+      }
+
+      usuario = await Usuario.ensureIdentityUserFromUta(usuarioUta);
     }
 
-    const hashedPassword = usuario.password_hash || usuario.password || usuario.pass || usuario.contraseña;
-    if (!hashedPassword) {
-      console.error('No se encontró campo de contraseña válido para el usuario:', usuario);
-      return res.status(500).json({ message: 'Error en el servidor' });
+    let storedPassword = usuario.password_hash || usuario.password || usuario.pass || usuario.contraseña || usuario.CON_USU;
+    if (!storedPassword) {
+      const usuarioUta = await Usuario.findByEmailInUta(email);
+      if (!usuarioUta) {
+        console.error('No se encontró contraseña en BD_IDENTIDAD ni usuario en BD_UTA:', usuario);
+        return res.status(500).json({ message: 'Error en el servidor' });
+      }
+
+      storedPassword = usuarioUta.password;
     }
 
-    // T1.2: comparar contraseña con bcrypt
-    const passwordValida = await bcrypt.compare(password, hashedPassword);
+    // Acepta contraseñas con hash bcrypt o texto plano para entornos semilla.
+    const passwordValida = await verifyPassword(password, storedPassword);
     if (!passwordValida) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
-    const rolUsuario = usuario.rol || usuario.role;
-    const emailUsuario = usuario.email || usuario.correo;
+    const rolUsuario = usuario.rol || usuario.role || usuario.rolCodigo;
+    const emailUsuario = usuario.email || usuario.correo || usuario.COR_INS_REF_USU;
+    const idUsuario = usuario.id || usuario.ID_USU;
 
     // T1.1: generar token JWT
-    const token = generateToken(usuario.id, rolUsuario);
+    const token = generateToken(idUsuario, rolUsuario);
 
     res.json({
-      id: usuario.id,
+      id: idUsuario,
       nombre: usuario.nombre,
       email: emailUsuario,
       rol: rolUsuario,
@@ -42,6 +71,15 @@ const login = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+
+    if (error.code === 'ER_ACCESS_DENIED_ERROR') {
+      return res.status(500).json({ message: 'Error de conexión a MySQL: revisa DB_USER y DB_PASSWORD en backend/.env' });
+    }
+
+    if (error.code === 'ER_BAD_DB_ERROR') {
+      return res.status(500).json({ message: 'Base de datos no encontrada: revisa los nombres DB_*_NAME en backend/.env' });
+    }
+
     res.status(500).json({ message: 'Error en el servidor' });
   }
 };
