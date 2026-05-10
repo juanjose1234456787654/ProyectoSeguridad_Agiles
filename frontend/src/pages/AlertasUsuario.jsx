@@ -22,9 +22,12 @@ const AlertasUsuario = () => {
   const [valorConfianza, setValorConfianza] = useState('');
   const [guardandoConfianza, setGuardandoConfianza] = useState(false);
 
+  const normalizarId = (value) => String(value || '').trim().toUpperCase();
+
   const filtrarAlertasDelUsuario = (alertas = []) => {
     if (!Array.isArray(alertas) || !user?.id) return [];
-    return alertas.filter((a) => String(a?.idUsuario) === String(user.id));
+    const idUsuarioActual = normalizarId(user.id);
+    return alertas.filter((a) => normalizarId(a?.idUsuario) === idUsuarioActual);
   };
 
   const cargarMisAlertas = async () => {
@@ -34,7 +37,7 @@ const AlertasUsuario = () => {
     }
     try {
       console.log(`Cargando alertas del usuario ${user.id}...`);
-      const alertas = await alertaService.getMisAlertas(user.id);
+      const alertas = await alertaService.getMisAlertas();
       console.log('Alertas cargadas:', alertas);
       setMisAlertas(filtrarAlertasDelUsuario(alertas));
     } catch (e) {
@@ -81,7 +84,7 @@ const AlertasUsuario = () => {
       onIncidenteCreado: (payload) => {
         if (!payload) return;
 
-        const esMiAlerta = String(payload.idUsuario) === String(user.id);
+        const esMiAlerta = normalizarId(payload.idUsuario) === normalizarId(user.id);
         if (esMiAlerta) {
           setUltimaAlerta(payload);
           setEstado('Activo');
@@ -347,8 +350,7 @@ const AlertasUsuario = () => {
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  gap: '1rem'
+                  alignItems: 'flex-start'
                 }}>
                   <div style={{ flex: 1 }}>
                     <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#92400e' }}>
@@ -365,18 +367,6 @@ const AlertasUsuario = () => {
                         <strong>Acciones del guardia:</strong> {alerta.acciones}
                       </p>
                     )}
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '60px',
-                    height: '60px',
-                    borderRadius: '50%',
-                    background: '#fed7aa',
-                    fontSize: '1.5rem'
-                  }}>
-                    Aviso
                   </div>
                 </div>
               </div>

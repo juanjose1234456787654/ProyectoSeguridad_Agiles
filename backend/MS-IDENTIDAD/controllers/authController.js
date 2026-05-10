@@ -9,12 +9,16 @@ const verifyPassword = async (plainPassword, storedPassword) => {
   if (isBcryptHash(storedPassword)) {
     return bcrypt.compare(plainPassword, storedPassword);
   }
-  return plainPassword === storedPassword;
+  // Comparacion tolerante para contraseñas en texto plano (evita fallos por espacios accidentales)
+  return String(plainPassword).trim() === String(storedPassword).trim();
 };
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const rawEmail = req.body?.email;
+    const rawPassword = req.body?.password;
+    const email = String(rawEmail || '').trim().toLowerCase();
+    const password = String(rawPassword || '');
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Faltan email o contraseña' });

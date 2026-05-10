@@ -134,7 +134,14 @@ const Login = () => {
           navigate('/alertas');
       }
     } catch (err) {
-      const errorMsg = err.response?.data?.message || 'Credenciales inválidas';
+      let errorMsg = 'Credenciales inválidas';
+      if (!err.response) {
+        errorMsg = 'No se pudo conectar con el servidor. Verifica que el API Gateway este encendido (puerto 4000).';
+      } else if (err.response?.status >= 500) {
+        errorMsg = 'Error interno del servidor. Intenta nuevamente en unos segundos.';
+      } else {
+        errorMsg = err.response?.data?.message || errorMsg;
+      }
       showToast(errorMsg, 'error');
     } finally {
       setLoading(false);

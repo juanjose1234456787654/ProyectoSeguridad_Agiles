@@ -37,11 +37,8 @@ const saveMiConfianza = async ({ tipo, valor }) => {
   return response.data;
 };
 
-const getMisAlertas = async (idUsuario) => {
-  const response = await axios.get(
-    `${API_BASE}/incidentes/usuario/${idUsuario}`,
-    getAuthHeaders()
-  );
+const getMisAlertas = async () => {
+  const response = await axios.get(`${API_BASE}/incidentes/usuario/me`, getAuthHeaders());
   return response.data;
 };
 
