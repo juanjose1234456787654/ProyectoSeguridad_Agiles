@@ -3,8 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const { protect } = require('./middlewares/authMiddleware');
 const {
-  identidadProxy,
+  identidadAuthProxy,
+  identidadApiProxy,
   incidentesProxy,
+  incidentesSocketProxy,
   seguridadProxy,
   estadisticasProxy
 } = require('./config/proxies');
@@ -18,14 +20,17 @@ app.use((req, _res, next) => {
   next();
 });
 
+// Proxy de Socket.IO hacia MS-INCIDENTES
+app.use('/socket.io', incidentesSocketProxy);
+
 // Verificacion de JWT en todas las rutas (excepto /api/auth/login)
 app.use(protect);
 
 // ─── Enrutamiento hacia microservicios ────────────────────────────────────────
 
-// MS-IDENTIDAD  → login, perfil, admin-only
-app.use('/api/auth', identidadProxy);
-app.use('/api/identidad', identidadProxy);
+// MS-IDENTIDAD  → login, perfil, configuración de confianza
+app.use('/api/auth', identidadAuthProxy);
+app.use('/api/identidad', identidadApiProxy);
 
 // MS-INCIDENTES → incidentes y zonas
 app.use('/api/incidentes', incidentesProxy);
@@ -60,6 +65,7 @@ app.use((_req, res) => {
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`API-GATEWAY corriendo en http://localhost:${PORT}`);
+  console.log(`  → /socket.io/*          MS-INCIDENTES  (:4002)`);
   console.log(`  → /api/auth/*           MS-IDENTIDAD   (:4001)`);
   console.log(`  → /api/incidentes/*     MS-INCIDENTES  (:4002)`);
   console.log(`  → /api/zonas/*          MS-INCIDENTES  (:4002)`);

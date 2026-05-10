@@ -15,6 +15,91 @@ const getNextIncidenteId = async () => {
 const Incidente = {
   // Obtener todos los incidentes con nombre de zona
   findAll: async () => {
+    try {
+      const [rows] = await db.query(
+        `SELECT
+          i.ID_INC      AS id,
+          i.MOT_INC     AS motivo,
+          i.EST_INC     AS estado,
+          i.ID_ZON_PER  AS idZona,
+          z.NOM_ZON     AS nombreZona,
+          i.ID_USU_REF  AS idUsuario,
+          u.COR_INS_REF_USU AS emailUsuario,
+          LTRIM(RTRIM(CONCAT(
+            COALESCE(p.NOM1_PER, ''), ' ',
+            COALESCE(p.NOM2_PER, ''), ' ',
+            COALESCE(p.APE1_PER, ''), ' ',
+            COALESCE(p.APE2_PER, '')
+          ))) AS nombreUsuario
+        FROM INCIDENTES i
+        LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+        LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+        LEFT JOIN [BD_UTA].dbo.PERSONAS_UTA p ON p.COR_PER = u.COR_INS_REF_USU
+        ORDER BY i.ID_INC`
+      );
+      return rows;
+    } catch {
+      const [rows] = await db.query(
+        `SELECT
+          i.ID_INC      AS id,
+          i.MOT_INC     AS motivo,
+          i.EST_INC     AS estado,
+          i.ID_ZON_PER  AS idZona,
+          z.NOM_ZON     AS nombreZona,
+          i.ID_USU_REF  AS idUsuario
+        FROM INCIDENTES i
+        LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+        ORDER BY i.ID_INC`
+      );
+      return rows;
+    }
+  },
+
+  // Obtener un incidente por ID
+  findById: async (id) => {
+    try {
+      const [rows] = await db.query(
+        `SELECT
+          i.ID_INC      AS id,
+          i.MOT_INC     AS motivo,
+          i.EST_INC     AS estado,
+          i.ID_ZON_PER  AS idZona,
+          z.NOM_ZON     AS nombreZona,
+          i.ID_USU_REF  AS idUsuario,
+          u.COR_INS_REF_USU AS emailUsuario,
+          LTRIM(RTRIM(CONCAT(
+            COALESCE(p.NOM1_PER, ''), ' ',
+            COALESCE(p.NOM2_PER, ''), ' ',
+            COALESCE(p.APE1_PER, ''), ' ',
+            COALESCE(p.APE2_PER, '')
+          ))) AS nombreUsuario
+        FROM INCIDENTES i
+        LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+        LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+        LEFT JOIN [BD_UTA].dbo.PERSONAS_UTA p ON p.COR_PER = u.COR_INS_REF_USU
+        WHERE i.ID_INC = ?`,
+        [id]
+      );
+      return rows[0] || null;
+    } catch {
+      const [rows] = await db.query(
+        `SELECT
+          i.ID_INC      AS id,
+          i.MOT_INC     AS motivo,
+          i.EST_INC     AS estado,
+          i.ID_ZON_PER  AS idZona,
+          z.NOM_ZON     AS nombreZona,
+          i.ID_USU_REF  AS idUsuario
+        FROM INCIDENTES i
+        LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+        WHERE i.ID_INC = ?`,
+        [id]
+      );
+      return rows[0] || null;
+    }
+  },
+
+  findActivos: async () => {
     const [rows] = await db.query(
       `SELECT
         i.ID_INC      AS id,
@@ -22,16 +107,24 @@ const Incidente = {
         i.EST_INC     AS estado,
         i.ID_ZON_PER  AS idZona,
         z.NOM_ZON     AS nombreZona,
-        i.ID_USU_REF  AS idUsuario
+        i.ID_USU_REF  AS idUsuario,
+        u.COR_INS_REF_USU AS emailUsuario,
+        i.ACCIONES_INC AS acciones
       FROM INCIDENTES i
       LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+      LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+      WHERE i.EST_INC = 'Activo'
       ORDER BY i.ID_INC`
     );
     return rows;
   },
 
-  // Obtener un incidente por ID
-  findById: async (id) => {
+  findByUsuario: async (idUsuario) => {
+    // Convertir a string y limpiar
+    const usuarioID = String(idUsuario).trim();
+    
+    console.log(`[Incidente.findByUsuario] Buscando alertas de usuario: "${usuarioID}"`);
+    
     const [rows] = await db.query(
       `SELECT
         i.ID_INC      AS id,
@@ -39,13 +132,19 @@ const Incidente = {
         i.EST_INC     AS estado,
         i.ID_ZON_PER  AS idZona,
         z.NOM_ZON     AS nombreZona,
-        i.ID_USU_REF  AS idUsuario
+        i.ID_USU_REF  AS idUsuario,
+        u.COR_INS_REF_USU AS emailUsuario,
+        i.ACCIONES_INC AS acciones
       FROM INCIDENTES i
       LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
-      WHERE i.ID_INC = ?`,
-      [id]
+      LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+      WHERE i.ID_USU_REF = ? AND i.EST_INC = 'Activo'
+      ORDER BY i.ID_INC DESC`,
+      [usuarioID]
     );
-    return rows[0] || null;
+    
+    console.log(`[Incidente.findByUsuario] Se encontraron ${rows.length} alertas`);
+    return rows;
   },
 
   // Crear un nuevo incidente
@@ -73,6 +172,17 @@ const Incidente = {
   // Eliminar un incidente
   delete: async (id) => {
     await db.query('DELETE FROM INCIDENTES WHERE ID_INC = ?', [id]);
+  },
+
+  // Cerrar incidente (cambio de estado + acciones)
+  close: async (id, acciones = null) => {
+    await db.query(
+      `UPDATE INCIDENTES
+       SET EST_INC = 'Cerrado', ACCIONES_INC = ?
+       WHERE ID_INC = ?`,
+      [acciones, id]
+    );
+    return Incidente.findById(id);
   }
 };
 

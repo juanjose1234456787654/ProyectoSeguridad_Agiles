@@ -4,6 +4,8 @@ import Login from './components/Login';
 import PrivateRoute from './utils/PrivateRoute';
 import DashboardEstudiante from './pages/DashboardEstudiante';
 import DashboardGuardia from './pages/DashboardGuardia';
+import CerrarReporteGuardia from './pages/CerrarReporteGuardia';
+import AlertasUsuario from './pages/AlertasUsuario';
 import DashboardAdmin from './pages/DashboardAdmin';
 import Unauthorized from './pages/Unauthorized';
 
@@ -23,6 +25,16 @@ function App() {
           <Route path="/guardia" element={
             <PrivateRoute allowedRoles={['Guardia']}>
               <DashboardGuardia />
+            </PrivateRoute>
+          } />
+          <Route path="/alertas" element={
+            <PrivateRoute allowedRoles={['Guardia', 'Estudiante', 'Docente', 'Personal']}>
+              <AlertasUsuario />
+            </PrivateRoute>
+          } />
+          <Route path="/guardia/cerrar/:idIncidente" element={
+            <PrivateRoute allowedRoles={['Guardia']}>
+              <CerrarReporteGuardia />
             </PrivateRoute>
           } />
           <Route path="/admin" element={

@@ -8,7 +8,6 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const canvasRef = useRef(null);
@@ -106,30 +105,6 @@ const Login = () => {
     }, 3500);
   };
 
-  const openModal = (title, bodyHtml, onConfirm) => {
-    const modal = document.getElementById('customModal');
-    if (!modal) return;
-    document.getElementById('modalTitle').innerHTML = title;
-    document.getElementById('modalBody').innerHTML = bodyHtml;
-    modal.classList.add('active');
-    const confirmBtn = document.getElementById('modalConfirm');
-    const cancelBtn = document.getElementById('modalCancel');
-    const handleConfirm = () => {
-      modal.classList.remove('active');
-      onConfirm();
-      confirmBtn.removeEventListener('click', handleConfirm);
-      cancelBtn.removeEventListener('click', handleCancel);
-    };
-    const handleCancel = () => {
-      modal.classList.remove('active');
-      confirmBtn.removeEventListener('click', handleConfirm);
-      cancelBtn.removeEventListener('click', handleCancel);
-    };
-    confirmBtn.onclick = handleConfirm;
-    cancelBtn.onclick = handleCancel;
-    modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('active'); };
-  };
-
   // ==================== LOGIN REAL CON BACKEND ====================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -140,17 +115,9 @@ const Login = () => {
     setLoading(true);
     try {
       const userData = await login(email, password);
-      showToast(`✅ Bienvenido ${userData.nombre || email} al sistema de seguridad UTA`, 'success');
+      showToast(`Bienvenido ${userData.nombre || email} al sistema de seguridad UTA`, 'success');
 
-      if (remember) {
-        localStorage.setItem('utaUser', email);
-        localStorage.setItem('utaRemember', 'true');
-      } else {
-        localStorage.removeItem('utaUser');
-        localStorage.removeItem('utaRemember');
-      }
-
-      // Redirigir según el rol
+      // Redirigir según rol
       switch (userData.rol) {
         case 'Administrador':
           navigate('/admin');
@@ -161,10 +128,10 @@ const Login = () => {
         case 'Estudiante':
         case 'Docente':
         case 'Personal':
-          navigate('/estudiante');
+          navigate('/alertas');
           break;
         default:
-          navigate('/dashboard');
+          navigate('/alertas');
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Credenciales inválidas';
@@ -173,15 +140,6 @@ const Login = () => {
       setLoading(false);
     }
   };
-
-  // Restaurar usuario recordado
-  useEffect(() => {
-    const savedUser = localStorage.getItem('utaUser');
-    if (savedUser) {
-      setEmail(savedUser);
-      setRemember(true);
-    }
-  }, []);
 
   // ==================== RENDER DEL DISEÑO COMPLETO ====================
   return (
@@ -243,49 +201,10 @@ const Login = () => {
                   <i className={`far ${showPassword ? 'fa-eye' : 'fa-eye-slash'}`}></i>
                 </button>
               </div>
-              <div className="options">
-                <label className="checkbox">
-                  <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Recordarme
-                </label>
-                <a href="#" className="forgot" onClick={(e) => {
-                  e.preventDefault();
-                  openModal('Recuperar contraseña',
-                    `<p>Ingresa tu correo institucional para recibir instrucciones.</p>
-                     <input type="email" id="recoveryEmail" placeholder="correo@uta.edu.ec" style="width:100%;">`,
-                    () => {
-                      const emailRec = document.getElementById('recoveryEmail')?.value;
-                      if (emailRec && emailRec.includes('@')) {
-                        showToast(`📧 Se han enviado instrucciones a ${emailRec}`, 'success');
-                      } else {
-                        showToast('Correo inválido, intenta de nuevo', 'error');
-                      }
-                    });
-                }}>
-                  <i className="fas fa-key"></i> ¿Olvidaste tu contraseña?
-                </a>
-              </div>
               <button type="submit" className="btn-login" disabled={loading}>
                 {loading ? <i className="fas fa-circle-notch fa-spin"></i> : <span>Ingresar al sistema</span>}
                 {!loading && <i className="fas fa-arrow-right"></i>}
               </button>
-              <div className="register">
-                ¿No tienes cuenta? <a href="#" onClick={(e) => {
-                  e.preventDefault();
-                  openModal('Solicitar acceso seguro',
-                    `<p>Completa tus datos para solicitar credenciales:</p>
-                     <input type="text" id="regName" placeholder="Nombres completos" style="width:100%; margin-bottom:12px;">
-                     <input type="email" id="regEmail" placeholder="Correo institucional" style="width:100%;">`,
-                    () => {
-                      const name = document.getElementById('regName')?.value;
-                      const emailReg = document.getElementById('regEmail')?.value;
-                      if (name && emailReg && emailReg.includes('@')) {
-                        showToast(`📋 Solicitud enviada. Revisa tu correo ${emailReg}`, 'success');
-                      } else {
-                        showToast('Completa todos los campos correctamente', 'error');
-                      }
-                    });
-                }}>Solicitar acceso seguro</a>
-              </div>
             </form>
           </div>
         </div>
@@ -293,18 +212,6 @@ const Login = () => {
 
       <div className="footer-uta">
         © 2025 UTA Seguridad – Protegiendo tu identidad digital
-      </div>
-
-      {/* MODAL GENÉRICO */}
-      <div id="customModal" className="modal">
-        <div className="modal-content">
-          <h3 id="modalTitle"></h3>
-          <div id="modalBody"></div>
-          <div className="modal-buttons">
-            <button className="cancel" id="modalCancel">Cancelar</button>
-            <button className="confirm" id="modalConfirm">Aceptar</button>
-          </div>
-        </div>
       </div>
     </>
   );

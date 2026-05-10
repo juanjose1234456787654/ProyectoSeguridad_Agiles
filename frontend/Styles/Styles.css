@@ -74,7 +74,7 @@ body {
 /* CABEZA */
 .head {
     position: absolute;
-    top: 8px;
+    top: 28px;
     left: 50%;
     transform: translateX(-50%);
     width: 100px;
@@ -157,7 +157,7 @@ body {
 /* CUERPO */
 .body {
     position: absolute;
-    bottom: 55px;
+    top: 130px;
     left: 50%;
     transform: translateX(-50%);
     width: 125px;
@@ -188,7 +188,7 @@ body {
 /* BRAZOS Y PIERNAS */
 .arm {
     position: absolute;
-    top: 68px;
+    top: 142px;
     width: 42px;
     height: 78px;
     background: var(--uta-blue);
@@ -196,8 +196,8 @@ body {
     box-shadow: 0 3px 0 #031c3a;
     transform-origin: top center;
 }
-.arm.left { left: -12px; transform: rotate(12deg); animation: armWalk 2.2s infinite alternate; }
-.arm.right { right: -12px; transform: rotate(-12deg); animation: armWalkRight 2.5s infinite alternate; }
+.arm.left { left: 38px; transform: rotate(10deg); animation: armWalk 2.2s infinite alternate; }
+.arm.right { right: 38px; transform: rotate(-10deg); animation: armWalkRight 2.5s infinite alternate; }
 .hand {
     position: absolute;
     bottom: -8px;
@@ -209,14 +209,14 @@ body {
 }
 .leg {
     position: absolute;
-    bottom: 0;
+    top: 262px;
     width: 38px;
     height: 62px;
     background: #1f4975;
     border-radius: 0 0 20px 20px;
 }
-.leg.left { left: 24px; transform: rotate(-3deg); animation: legMove 1.8s infinite alternate; }
-.leg.right { right: 24px; transform: rotate(3deg); animation: legMove 1.8s infinite alternate-reverse; }
+.leg.left { left: 86px; transform: rotate(-3deg); animation: legMove 1.8s infinite alternate; }
+.leg.right { right: 86px; transform: rotate(3deg); animation: legMove 1.8s infinite alternate-reverse; }
 .boot {
     position: absolute;
     bottom: -14px;

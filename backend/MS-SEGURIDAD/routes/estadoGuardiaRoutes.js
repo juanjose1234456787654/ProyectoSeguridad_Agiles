@@ -11,11 +11,11 @@ router.use(protect);
 // GET  /api/seguridad/guardias               → Administrador consulta todos
 router.get('/', authorize('Administrador'), getAll);
 
-// GET  /api/seguridad/guardias/:id           → Administrador o el propio guardia
-router.get('/:id', authorize('Administrador', 'Guardia'), getById);
-
 // GET  /api/seguridad/guardias/usuario/:idUsuario → el guardia ve su propio historial
 router.get('/usuario/:idUsuario', authorize('Administrador', 'Guardia'), getByUsuario);
+
+// GET  /api/seguridad/guardias/:id           → Administrador o el propio guardia
+router.get('/:id', authorize('Administrador', 'Guardia'), getById);
 
 // POST /api/seguridad/guardias               → Guardia registra su propio estado
 router.post('/', authorize('Guardia', 'Administrador'), create);

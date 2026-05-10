@@ -25,6 +25,17 @@ const getById = async (req, res) => {
   }
 };
 
+// GET /api/seguridad/alertas/guardia/:idUsuario/activas
+const getActivasByGuardia = async (req, res) => {
+  try {
+    const asignaciones = await AsignacionAlerta.findActivasByGuardiaUsuario(req.params.idUsuario);
+    res.json(asignaciones);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener alertas activas del guardia' });
+  }
+};
+
 // POST /api/seguridad/alertas
 const create = async (req, res) => {
   try {
@@ -58,4 +69,4 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, remove };
+module.exports = { getAll, getById, getActivasByGuardia, create, remove };

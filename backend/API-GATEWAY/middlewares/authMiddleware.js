@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const PUBLIC_PATHS = ['/api/auth/login'];
 
 const protect = (req, res, next) => {
-  if (PUBLIC_PATHS.includes(req.path)) {
+  if (PUBLIC_PATHS.includes(req.path) || req.path.startsWith('/socket.io')) {
     return next();
   }
 
