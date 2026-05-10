@@ -121,7 +121,7 @@ const Incidente = {
 
   findByUsuario: async (idUsuario) => {
     // Convertir a string y limpiar
-    const usuarioID = String(idUsuario).trim();
+    const usuarioID = String(idUsuario).trim().toUpperCase();
     
     console.log(`[Incidente.findByUsuario] Buscando alertas de usuario: "${usuarioID}"`);
     
@@ -138,7 +138,7 @@ const Incidente = {
       FROM INCIDENTES i
       LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
       LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
-      WHERE i.ID_USU_REF = ? AND i.EST_INC = 'Activo'
+      WHERE UPPER(LTRIM(RTRIM(i.ID_USU_REF))) = ? AND i.EST_INC = 'Activo'
       ORDER BY i.ID_INC DESC`,
       [usuarioID]
     );

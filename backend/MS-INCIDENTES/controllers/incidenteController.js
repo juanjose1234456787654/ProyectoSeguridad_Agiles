@@ -32,14 +32,15 @@ const getActivos = async (req, res) => {
 // GET /api/incidentes/usuario/:idUsuario
 const getByUsuario = async (req, res) => {
   try {
-    const idUsuarioToken = String(req.usuario?.id || '').trim();
-    const idUsuarioParam = String(req.params.idUsuario || '').trim();
+    const idUsuarioToken = String(req.usuario?.id || '').trim().toUpperCase();
+    const idUsuarioParamRaw = String(req.params.idUsuario || '').trim();
+    const idUsuarioParam = idUsuarioParamRaw.toUpperCase();
 
     if (!idUsuarioToken) {
       return res.status(401).json({ message: 'Token inválido: no se pudo identificar al usuario' });
     }
 
-    if (idUsuarioParam && idUsuarioParam !== idUsuarioToken) {
+    if (idUsuarioParam && idUsuarioParam !== 'ME' && idUsuarioParam !== idUsuarioToken) {
       console.warn(
         `[getByUsuario] Param (${idUsuarioParam}) distinto a token (${idUsuarioToken}). Se usa token.`
       );

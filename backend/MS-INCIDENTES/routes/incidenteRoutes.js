@@ -14,6 +14,9 @@ router.get('/', getAll);
 // GET  /api/incidentes/activos → todos los roles autenticados
 router.get('/activos', getActivos);
 
+// GET  /api/incidentes/usuario/me → mis alertas activas según token
+router.get('/usuario/me', getByUsuario);
+
 // GET  /api/incidentes/usuario/:idUsuario → mis alertas activas
 router.get('/usuario/:idUsuario', getByUsuario);
 
