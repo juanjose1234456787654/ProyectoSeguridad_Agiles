@@ -57,7 +57,7 @@ const runSqlServerQuery = async (database, sql, params = []) => {
     ? `SET NOCOUNT ON; ${query} FOR JSON PATH, INCLUDE_NULL_VALUES;`
     : `SET NOCOUNT ON; ${query};`;
 
-  const args = ['-S', instance, '-E', '-C', '-d', database, '-Q', wrappedQuery, '-h', '-1', '-W'];
+  const args = ['-S', instance, '-E', '-C', '-d', database, '-Q', wrappedQuery, '-y', '0'];
 
   const { stdout, stderr } = await execFileAsync('sqlcmd', args, {
     windowsHide: true,

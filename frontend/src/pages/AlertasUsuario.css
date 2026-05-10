@@ -1,0 +1,195 @@
+.alertas-shell {
+  max-width: 920px;
+  margin: 1.2rem auto;
+  padding: 0 1rem 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.alertas-card,
+.confianza-card,
+.resumen-card {
+  background: #f4f6fa;
+  border: 1px solid #d8deea;
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  box-shadow: 0 10px 24px rgba(34, 46, 76, 0.08);
+}
+
+.alertas-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.8rem;
+  border-bottom: 1px solid #d8deea;
+  padding-bottom: 0.8rem;
+}
+
+.alertas-header h1 {
+  margin: 0;
+  color: #29344d;
+}
+
+.alertas-header p {
+  margin: 0.45rem 0 0;
+  color: #4a556d;
+}
+
+.form-grid {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid label {
+  display: grid;
+  gap: 0.35rem;
+  color: #2f3b54;
+  font-weight: 600;
+}
+
+.form-grid input,
+.form-grid select {
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid #c8d1e2;
+  padding: 0 0.75rem;
+  font-size: 1rem;
+  color: #22304f;
+}
+
+.center-block {
+  display: grid;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.btn-alerta {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 4px solid #2c364d;
+  background: radial-gradient(circle at 30% 25%, #5a6580, #353f57);
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 14px 25px rgba(26, 34, 52, 0.36);
+}
+
+.btn-alerta:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.whatsapp-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.whatsapp-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-whatsapp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #25d366;
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-whatsapp:hover {
+  background: #1ebe5d;
+}
+
+.confianza-actual {
+  margin-left: 1rem;
+  font-size: 0.88rem;
+  color: #3d5280;
+  align-self: center;
+}
+
+.status-row {
+  margin-top: 1.1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #d8deea;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  color: #2e3d59;
+}
+
+.msg {
+  margin-top: 0.8rem;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+}
+
+.msg.error {
+  color: #8a1f1f;
+  background: #ffe6e6;
+}
+
+.msg.ok {
+  color: #145534;
+  background: #e3f8ed;
+}
+
+.panel-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+button {
+  border: none;
+  border-radius: 8px;
+  background: #21335b;
+  color: #fff;
+  padding: 0.6rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-ghost {
+  background: #e5ebf7;
+  color: #223252;
+}
+
+.confianza-card.compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+@media (max-width: 780px) {
+  .form-grid,
+  .confianza-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-row {
+    flex-direction: column;
+  }
+
+  .confianza-card.compact {
+    display: grid;
+  }
+}

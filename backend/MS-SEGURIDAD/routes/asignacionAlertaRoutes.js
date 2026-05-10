@@ -1,5 +1,5 @@
 const express = require('express');
-const { getAll, getById, create, remove } = require('../controllers/asignacionAlertaController');
+const { getAll, getById, getActivasByGuardia, create, remove } = require('../controllers/asignacionAlertaController');
 const { protect } = require('../middlewares/authMiddleware');
 const { authorize } = require('../middlewares/roleMiddleware');
 
@@ -10,6 +10,9 @@ router.use(protect);
 
 // GET  /api/seguridad/alertas         → Administrador y Guardia consultan
 router.get('/', authorize('Administrador', 'Guardia'), getAll);
+
+// GET /api/seguridad/alertas/guardia/:idUsuario/activas → alerta activa por guardia
+router.get('/guardia/:idUsuario/activas', authorize('Administrador', 'Guardia'), getActivasByGuardia);
 
 // GET  /api/seguridad/alertas/:id     → Administrador y Guardia
 router.get('/:id', authorize('Administrador', 'Guardia'), getById);

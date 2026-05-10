@@ -54,17 +54,32 @@ const login = async (req, res) => {
 
     const rolUsuario = usuario.rol || usuario.role || usuario.rolCodigo;
     const emailUsuario = usuario.email || usuario.correo || usuario.COR_INS_REF_USU;
-    const idUsuario = usuario.id || usuario.ID_USU;
+    let idUsuario = usuario.id || usuario.ID_USU;
+    
+    // Asegurar que el ID sea string
+    idUsuario = String(idUsuario).trim();
+
+    console.log(`[LOGIN] Usuario encontrado:`, {
+      idUsuario,
+      idUsuarioType: typeof idUsuario,
+      idUsuarioLength: idUsuario.length,
+      emailUsuario,
+      rolUsuario
+    });
 
     const token = generateToken(idUsuario, rolUsuario);
 
-    res.json({
+    const response = {
       id: idUsuario,
       nombre: usuario.nombre,
       email: emailUsuario,
       rol: rolUsuario,
       token
-    });
+    };
+
+    console.log(`[LOGIN] Respuesta a enviar:`, response);
+
+    res.json(response);
   } catch (error) {
     console.error(error);
 
