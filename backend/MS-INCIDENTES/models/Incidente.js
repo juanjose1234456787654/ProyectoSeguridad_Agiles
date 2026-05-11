@@ -12,7 +12,55 @@ const getNextIncidenteId = async () => {
   return `INC${String(next).padStart(2, '0')}`;
 };
 
+const getNextHistorialId = async () => {
+  const [rows] = await db.query(
+    `SELECT
+      COALESCE(MAX(CAST(SUBSTRING(ID_HIS, 4, LEN(ID_HIS) - 3) AS INT)), 0) AS maxId
+    FROM [BD_ESTADISTICAS].dbo.HISTORIAL`
+  );
+  const next = Number(rows[0]?.maxId || 0) + 1;
+  return `HIS${String(next).padStart(2, '0')}`;
+};
+
+const toSqlDateTime = (value) => {
+  const d = value ? new Date(value) : new Date();
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+};
+
+const getFechaInicioIncidente = async (idIncidente) => {
+  const candidateColumns = ['FEC_INI_INC', 'FEC_CRE_INC', 'FEC_REG_INC'];
+
+  for (const columnName of candidateColumns) {
+    try {
+      const [rows] = await db.query(
+        `SELECT TOP 1 ${columnName} AS fechaInicio
+         FROM INCIDENTES
+         WHERE ID_INC = ?`,
+        [idIncidente]
+      );
+
+      if (rows[0]?.fechaInicio) {
+        return toSqlDateTime(rows[0].fechaInicio);
+      }
+    } catch {
+      // Ignorar columna inexistente y probar la siguiente.
+    }
+  }
+
+  return toSqlDateTime(new Date());
+};
+
 const Incidente = {
+  getConfianzaByUserId: async (idUsuario) => {
+    const [rows] = await db.query(
+      `SELECT TOP 1 GRU_CON_USU AS confianza
+       FROM [BD_IDENTIDAD].dbo.USUARIOS
+       WHERE ID_USU = ?`,
+      [idUsuario]
+    );
+    return rows[0]?.confianza || null;
+  },
+
   // Obtener todos los incidentes con nombre de zona
   findAll: async () => {
     try {
@@ -145,6 +193,45 @@ const Incidente = {
     
     console.log(`[Incidente.findByUsuario] Se encontraron ${rows.length} alertas`);
     return rows;
+  },
+
+  getAsignacionIdByIncidente: async (idIncidente) => {
+    const [rows] = await db.query(
+      `SELECT TOP 1 ID_ASI AS idAsignacion
+       FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS
+       WHERE ID_INC_PER = ?
+       ORDER BY ID_ASI DESC`,
+      [idIncidente]
+    );
+
+    return rows[0]?.idAsignacion || null;
+  },
+
+  saveHistorialCierre: async ({ idIncidente, acciones }) => {
+    const idAsignacion = await Incidente.getAsignacionIdByIncidente(idIncidente);
+    if (!idAsignacion) {
+      return { saved: false, reason: 'missing-asignacion' };
+    }
+
+    const idHistorial = await getNextHistorialId();
+    const fechaInicio = await getFechaInicioIncidente(idIncidente);
+    const fechaCierre = toSqlDateTime(new Date());
+    const resultadoGuardia = `Acciones Realizadas: ${String(acciones || 'Sin detalle').trim()}`;
+
+    await db.query(
+      `INSERT INTO [BD_ESTADISTICAS].dbo.HISTORIAL
+        (ID_HIS, FEC_INI_HIS, FEC_CIE_HIS, RES_GUA_HIS, ID_ASI_REF, DATOS_JSON)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [idHistorial, fechaInicio, fechaCierre, resultadoGuardia, idAsignacion, null]
+    );
+
+    return {
+      saved: true,
+      idHistorial,
+      idAsignacion,
+      fechaInicio,
+      fechaCierre
+    };
   },
 
   // Crear un nuevo incidente

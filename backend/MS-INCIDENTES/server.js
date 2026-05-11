@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const incidenteRoutes = require('./routes/incidenteRoutes');
 const zonaRoutes = require('./routes/zonaRoutes');
 const { testConnections, databaseNames } = require('./config/db');
+const { initWhatsAppWeb } = require('./services/whatsappWebService');
 
 const app = express();
 app.use(cors());
@@ -72,4 +73,13 @@ app.get('/api/incidentes/health', async (req, res) => {
 const PORT = process.env.PORT || 4002;
 server.listen(PORT, () => {
   console.log(`MS-INCIDENTES corriendo en http://localhost:${PORT}`);
+
+  const whatsappEnabled = String(process.env.WHATSAPP_ENABLED || 'false').toLowerCase() === 'true';
+  const provider = String(process.env.WHATSAPP_PROVIDER || 'cloud').toLowerCase();
+
+  if (whatsappEnabled && provider === 'webjs') {
+    initWhatsAppWeb().catch((error) => {
+      console.error('[whatsapp-web] Error al inicializar cliente:', error.message);
+    });
+  }
 });

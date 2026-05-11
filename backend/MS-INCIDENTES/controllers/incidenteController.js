@@ -1,9 +1,52 @@
 const Incidente = require('../models/Incidente');
+const { sendAlertToConfianza } = require('../services/whatsappService');
 
 const emitRealtime = (req, eventName, payload) => {
   const io = req.app.get('io');
   if (io) {
     io.emit(eventName, payload);
+  }
+};
+
+const notifyConfianza = async ({ incidente, idUsuario }) => {
+  try {
+    console.log(`[whatsapp] Intentando recuperar confianza para usuario: ${idUsuario}`);
+    const confianzaRaw = await Incidente.getConfianzaByUserId(idUsuario);
+    console.log(`[whatsapp] Confianza recuperada (raw): ${confianzaRaw || 'NULL'}`);
+    
+    if (!confianzaRaw) {
+      console.log(`[whatsapp] No hay confianza configurada para usuario ${idUsuario}`);
+      return;
+    }
+
+    const result = await sendAlertToConfianza({ incidente, confianzaRaw });
+    console.log(`[whatsapp] Resultado del envío:`, result);
+
+    if (!result.sent) {
+      console.log(`[whatsapp] No enviado para incidente ${incidente.id}: ${result.reason}`);
+      return;
+    }
+
+    console.log(`[whatsapp] Alerta ${incidente.id} enviada exitosamente`);
+  } catch (error) {
+    console.error(`[whatsapp] Error enviando alerta ${incidente.id}:`, error.message);
+    console.error('[whatsapp] Stack:', error.stack);
+  }
+};
+
+const registrarHistorialCierre = async ({ idIncidente, acciones }) => {
+  try {
+    const result = await Incidente.saveHistorialCierre({ idIncidente, acciones });
+    if (!result.saved) {
+      console.warn(`[historial] No se guardó historial para ${idIncidente}: ${result.reason}`);
+      return;
+    }
+
+    console.log(
+      `[historial] Registrado ${result.idHistorial} para incidente ${idIncidente} con asignación ${result.idAsignacion}`
+    );
+  } catch (error) {
+    console.error(`[historial] Error guardando historial para ${idIncidente}:`, error.message);
   }
 };
 
@@ -91,6 +134,7 @@ const create = async (req, res) => {
     const nuevo = await Incidente.create({ motivo, estado, idZona, idUsuario });
     
     console.log(`[create] Incidente creado: ${nuevo.id} para usuario: "${nuevo.idUsuario}"`);
+    await notifyConfianza({ incidente: nuevo, idUsuario });
     
     emitRealtime(req, 'incidente:creado', nuevo);
     res.status(201).json(nuevo);
@@ -144,6 +188,7 @@ const close = async (req, res) => {
 
     const { acciones } = req.body || {};
     const cerrado = await Incidente.close(req.params.id, acciones || null);
+    await registrarHistorialCierre({ idIncidente: req.params.id, acciones });
     emitRealtime(req, 'incidente:cerrado', cerrado);
     res.json(cerrado);
   } catch (error) {
