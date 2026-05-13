@@ -25,35 +25,53 @@ const login = async (req, res) => {
     }
 
     let usuario = await Usuario.findByEmailInIdentity(email);
+    let usuarioUta = null;
 
+    // Si no existe en BD_IDENTIDAD, buscar en BD_UTA
     if (!usuario) {
-      const usuarioUta = await Usuario.findByEmailInUta(email);
+      usuarioUta = await Usuario.findByEmailInUta(email);
       if (!usuarioUta) {
-        return res.status(401).json({ message: 'Credenciales inválidas' });
+        // Email no existe en ninguna BD - error específico de email
+        return res.status(401).json({ 
+          message: 'Correo Institucional Incorrecto',
+          errorType: 'invalid_email'
+        });
       }
 
+      // Email existe en BD_UTA, verificar contraseña
       const passwordValidaUta = await verifyPassword(password, usuarioUta.password);
       if (!passwordValidaUta) {
-        return res.status(401).json({ message: 'Credenciales inválidas' });
+        // Contraseña incorrecta - error específico de contraseña
+        return res.status(401).json({ 
+          message: 'Contraseña Incorrecta',
+          errorType: 'invalid_password'
+        });
       }
 
       usuario = await Usuario.ensureIdentityUserFromUta(usuarioUta);
-    }
-
-    let storedPassword = usuario.password_hash || usuario.password || usuario.pass || usuario.contraseña || usuario.CON_USU;
-
-    if (!storedPassword) {
-      const usuarioUta = await Usuario.findByEmailInUta(email);
-      if (!usuarioUta) {
-        console.error('No se encontró contraseña en BD_IDENTIDAD ni usuario en BD_UTA:', usuario);
-        return res.status(500).json({ message: 'Error en el servidor' });
+    } else {
+      // Email existe en BD_IDENTIDAD, verificar contraseña
+      let storedPassword = usuario.password_hash || usuario.password || usuario.pass || usuario.contraseña || usuario.CON_USU;
+      
+      if (!storedPassword) {
+        // Si no hay contraseña, intentar obtenerla de BD_UTA
+        usuarioUta = await Usuario.findByEmailInUta(email);
+        if (!usuarioUta) {
+          console.error('No se encontró contraseña en BD_IDENTIDAD ni usuario en BD_UTA:', usuario);
+          return res.status(500).json({ message: 'Error en el servidor' });
+        }
+        storedPassword = usuarioUta.password;
       }
-      storedPassword = usuarioUta.password;
-    }
 
-    const passwordValida = await verifyPassword(password, storedPassword);
-    if (!passwordValida) {
-      return res.status(401).json({ message: 'Credenciales inválidas' });
+      // Comparacion tolerante para contraseñas en texto plano (evita fallos por espacios accidentales)
+      const passwordValida = await verifyPassword(password, storedPassword);
+      if (!passwordValida) {
+        // Contraseña incorrecta - error específico de contraseña
+        return res.status(401).json({ 
+          message: 'Contraseña Incorrecta',
+          errorType: 'invalid_password'
+        });
+      }
     }
 
     const rolUsuario = usuario.rol || usuario.role || usuario.rolCodigo;

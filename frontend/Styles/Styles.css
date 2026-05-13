@@ -357,7 +357,7 @@ h1 {
 }
 /* INPUTS */
 .input-field {
-    margin-bottom: 1.4rem;
+    margin-bottom: 2rem;
     position: relative;
 }
 .input-field i {
@@ -381,6 +381,22 @@ h1 {
 .input-field input:focus {
     border-color: var(--uta-gold);
     box-shadow: 0 0 0 4px rgba(244,180,26,0.2);
+}
+.input-field input.input-error {
+    border-color: #e74c3c;
+    background: #fadbd8;
+}
+.input-field input.input-error:focus {
+    border-color: #e74c3c;
+    box-shadow: 0 0 0 4px rgba(231,76,60,0.2);
+}
+.error-message {
+    display: block;
+    font-size: 0.75rem;
+    color: #e74c3c;
+    margin-top: 0.4rem;
+    margin-left: 0.5rem;
+    font-weight: 500;
 }
 .toggle-pwd {
     position: absolute;
