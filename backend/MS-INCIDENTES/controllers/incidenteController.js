@@ -1,36 +1,9 @@
 const Incidente = require('../models/Incidente');
-const { sendAlertToConfianza } = require('../services/whatsappService');
 
 const emitRealtime = (req, eventName, payload) => {
   const io = req.app.get('io');
   if (io) {
     io.emit(eventName, payload);
-  }
-};
-
-const notifyConfianza = async ({ incidente, idUsuario }) => {
-  try {
-    console.log(`[whatsapp] Intentando recuperar confianza para usuario: ${idUsuario}`);
-    const confianzaRaw = await Incidente.getConfianzaByUserId(idUsuario);
-    console.log(`[whatsapp] Confianza recuperada (raw): ${confianzaRaw || 'NULL'}`);
-    
-    if (!confianzaRaw) {
-      console.log(`[whatsapp] No hay confianza configurada para usuario ${idUsuario}`);
-      return;
-    }
-
-    const result = await sendAlertToConfianza({ incidente, confianzaRaw });
-    console.log(`[whatsapp] Resultado del envío:`, result);
-
-    if (!result.sent) {
-      console.log(`[whatsapp] No enviado para incidente ${incidente.id}: ${result.reason}`);
-      return;
-    }
-
-    console.log(`[whatsapp] Alerta ${incidente.id} enviada exitosamente`);
-  } catch (error) {
-    console.error(`[whatsapp] Error enviando alerta ${incidente.id}:`, error.message);
-    console.error('[whatsapp] Stack:', error.stack);
   }
 };
 
@@ -134,7 +107,6 @@ const create = async (req, res) => {
     const nuevo = await Incidente.create({ motivo, estado, idZona, idUsuario });
     
     console.log(`[create] Incidente creado: ${nuevo.id} para usuario: "${nuevo.idUsuario}"`);
-    await notifyConfianza({ incidente: nuevo, idUsuario });
     
     emitRealtime(req, 'incidente:creado', nuevo);
     res.status(201).json(nuevo);

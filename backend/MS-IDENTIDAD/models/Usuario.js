@@ -164,26 +164,6 @@ const Usuario = {
     }
   },
 
-  getConfianzaByUserId: async (idUsuario) => {
-    const [rows] = await identidadDb.query(
-      `SELECT TOP 1 GRU_CON_USU AS confianza
-       FROM USUARIOS
-       WHERE ID_USU = ?`,
-      [idUsuario]
-    );
-    return rows[0]?.confianza || null;
-  },
-
-  updateConfianzaByUserId: async (idUsuario, confianza) => {
-    await identidadDb.query(
-      `UPDATE USUARIOS
-       SET GRU_CON_USU = ?
-       WHERE ID_USU = ?`,
-      [confianza, idUsuario]
-    );
-    return Usuario.getConfianzaByUserId(idUsuario);
-  },
-
   ensureIdentityUserFromUta
 };
 

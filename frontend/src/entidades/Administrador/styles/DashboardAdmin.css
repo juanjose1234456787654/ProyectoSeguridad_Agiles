@@ -1,0 +1,13 @@
+.dashboard-admin {
+  padding: 1.25rem;
+}
+
+.dashboard-admin__title {
+  margin: 0;
+  color: #21335b;
+}
+
+.dashboard-admin__text {
+  margin-top: 0.5rem;
+  color: #4b5563;
+}

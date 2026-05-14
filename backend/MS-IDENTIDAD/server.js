@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
-const identidadRoutes = require('./routes/identidadRoutes');
 const { testConnections, databaseNames } = require('./config/db');
 const { protect } = require('./middlewares/authMiddleware');
 const { authorize } = require('./middlewares/roleMiddleware');
@@ -11,9 +10,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Rutas de autenticación y módulo identidad
+// Rutas de autenticación
 app.use('/api/auth', authRoutes);
-app.use('/api/identidad', identidadRoutes);
 
 // Health check: verifica conexión a BD_IDENTIDAD y BD_UTA
 app.get('/api/identidad/health', async (req, res) => {
