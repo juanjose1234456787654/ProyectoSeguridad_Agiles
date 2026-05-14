@@ -8,6 +8,8 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
   const canvasRef = useRef(null);
@@ -105,13 +107,33 @@ const Login = () => {
     }, 3500);
   };
 
+  // ==================== LIMPIAR ERRORES AL ESCRIBIR ====================
+  const handleEmailChange = (e) => {
+    setEmail(e.target.value);
+    if (emailError) setEmailError('');
+  };
+
+  const handlePasswordChange = (e) => {
+    setPassword(e.target.value);
+    if (passwordError) setPasswordError('');
+  };
+
   // ==================== LOGIN REAL CON BACKEND ====================
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
-      showToast('Por favor, complete todos los campos', 'error');
+    setEmailError('');
+    setPasswordError('');
+
+    // Validar que los campos no estén vacíos
+    if (!email.trim()) {
+      setEmailError('Rellena este campo');
       return;
     }
+    if (!password.trim()) {
+      setPasswordError('Rellena este campo');
+      return;
+    }
+
     setLoading(true);
     try {
       const userData = await login(email, password);
@@ -135,14 +157,32 @@ const Login = () => {
       }
     } catch (err) {
       let errorMsg = 'Credenciales inválidas';
+      
       if (!err.response) {
         errorMsg = 'No se pudo conectar con el servidor. Verifica que el API Gateway este encendido (puerto 4000).';
+        showToast(errorMsg, 'error');
       } else if (err.response?.status >= 500) {
         errorMsg = 'Error interno del servidor. Intenta nuevamente en unos segundos.';
+        showToast(errorMsg, 'error');
+      } else if (err.response?.status === 401) {
+        // Error de autenticación - mostrar errores específicos según errorType
+        const errorType = err.response?.data?.errorType;
+        
+        if (errorType === 'invalid_email') {
+          setEmailError('Correo Institucional Incorrecto');
+          showToast('Correo Institucional Incorrecto', 'error');
+        } else if (errorType === 'invalid_password') {
+          setPasswordError('Contraseña Incorrecta');
+          showToast('Contraseña Incorrecta', 'error');
+        } else {
+          // Fallback si no viene errorType definido
+          errorMsg = err.response?.data?.message || errorMsg;
+          showToast(errorMsg, 'error');
+        }
       } else {
         errorMsg = err.response?.data?.message || errorMsg;
+        showToast(errorMsg, 'error');
       }
-      showToast(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -189,10 +229,12 @@ const Login = () => {
                   type="email"
                   placeholder="Correo institucional"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={handleEmailChange}
+                  className={emailError ? 'input-error' : ''}
                   required
                   autoComplete="username"
                 />
+                {emailError && <span className="error-message">{emailError}</span>}
               </div>
               <div className="input-field">
                 <i className="fas fa-lock"></i>
@@ -200,13 +242,15 @@ const Login = () => {
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Contraseña"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={handlePasswordChange}
+                  className={passwordError ? 'input-error' : ''}
                   required
                   autoComplete="current-password"
                 />
                 <button type="button" className="toggle-pwd" onClick={() => setShowPassword(!showPassword)}>
                   <i className={`far ${showPassword ? 'fa-eye' : 'fa-eye-slash'}`}></i>
                 </button>
+                {passwordError && <span className="error-message">{passwordError}</span>}
               </div>
               <button type="submit" className="btn-login" disabled={loading}>
                 {loading ? <i className="fas fa-circle-notch fa-spin"></i> : <span>Ingresar al sistema</span>}
