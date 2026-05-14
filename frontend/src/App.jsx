@@ -1,13 +1,15 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import Login from './components/Login';
+import Login from './auth/login/Login';
 import PrivateRoute from './utils/PrivateRoute';
-import DashboardEstudiante from './pages/DashboardEstudiante';
-import DashboardGuardia from './pages/DashboardGuardia';
-import CerrarReporteGuardia from './pages/CerrarReporteGuardia';
-import AlertasUsuario from './pages/AlertasUsuario';
-import DashboardAdmin from './pages/DashboardAdmin';
-import Unauthorized from './pages/Unauthorized';
+import DashboardEstudiante from './entidades/Estudiante/components/DashboardEstudiante';
+import DashboardDocente from './entidades/Docente/components/DashboardDocente';
+import DashboardPersonal from './entidades/Personal/components/DashboardPersonal';
+import DashboardGuardia from './entidades/Guardia/components/DashboardGuardia';
+import CerrarReporteGuardia from './entidades/Guardia/components/CerrarReporteGuardia';
+import AlertasUsuario from './entidades/Guardia/components/AlertasUsuario';
+import DashboardAdmin from './entidades/Administrador/components/DashboardAdmin';
+import Unauthorized from './auth/Unauthorized';
 
 function App() {
   return (
@@ -18,8 +20,18 @@ function App() {
           <Route path="/unauthorized" element={<Unauthorized />} />
           
           <Route path="/estudiante" element={
-            <PrivateRoute allowedRoles={['Estudiante', 'Docente', 'Personal']}>
+            <PrivateRoute allowedRoles={['Estudiante']}>
               <DashboardEstudiante />
+            </PrivateRoute>
+          } />
+          <Route path="/docente" element={
+            <PrivateRoute allowedRoles={['Docente']}>
+              <DashboardDocente />
+            </PrivateRoute>
+          } />
+          <Route path="/personal" element={
+            <PrivateRoute allowedRoles={['Personal']}>
+              <DashboardPersonal />
             </PrivateRoute>
           } />
           <Route path="/guardia" element={

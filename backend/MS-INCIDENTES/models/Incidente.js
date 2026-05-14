@@ -51,16 +51,6 @@ const getFechaInicioIncidente = async (idIncidente) => {
 };
 
 const Incidente = {
-  getConfianzaByUserId: async (idUsuario) => {
-    const [rows] = await db.query(
-      `SELECT TOP 1 GRU_CON_USU AS confianza
-       FROM [BD_IDENTIDAD].dbo.USUARIOS
-       WHERE ID_USU = ?`,
-      [idUsuario]
-    );
-    return rows[0]?.confianza || null;
-  },
-
   // Obtener todos los incidentes con nombre de zona
   findAll: async () => {
     try {

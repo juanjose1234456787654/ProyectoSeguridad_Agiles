@@ -28,7 +28,7 @@ app.use(protect);
 
 // ─── Enrutamiento hacia microservicios ────────────────────────────────────────
 
-// MS-IDENTIDAD  → login, perfil, configuración de confianza
+// MS-IDENTIDAD  → login y perfil
 app.use('/api/auth', identidadAuthProxy);
 app.use('/api/identidad', identidadApiProxy);
 
