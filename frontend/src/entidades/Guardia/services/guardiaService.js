@@ -70,6 +70,15 @@ const setEstadoGuardia = async ({ idEstado, enServicio, idUsuario }) => {
 	return response.data;
 };
 
+const asignarAlerta = async ({ idIncidente, idEstadoGuardia }) => {
+	const response = await axios.post(
+		`${API_BASE}/seguridad/alertas`,
+		{ idIncidente, idEstadoGuardia },
+		getAuthHeaders()
+	);
+	return response.data;
+};
+
 const connectGuardiaSocket = (handlers = {}) => {
 	const token = getToken();
 	const socket = io(SOCKET_URL, {
@@ -103,5 +112,6 @@ export default {
 	cerrarReporte,
 	getEstadoGuardia,
 	setEstadoGuardia,
+	asignarAlerta,
 	connectGuardiaSocket
 };

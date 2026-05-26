@@ -51,18 +51,21 @@ const buildQuery = (sql, params) => {
 
 const runSqlServerQuery = async (database, sql, params = []) => {
   const instance = process.env.DB_SQL_INSTANCE || 'localhost\\SQLEXPRESS';
-  const query = buildQuery(sql, params).trim();
+  // Normalizar: trim + colapsar newlines/tabs a un espacio para evitar problemas en Windows con args multilínea
+  const query = buildQuery(sql, params).trim().replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ');
   const isSelect = /^select\b/i.test(query);
 
   const wrappedQuery = isSelect
     ? `SET NOCOUNT ON; ${query} FOR JSON PATH, INCLUDE_NULL_VALUES;`
     : `SET NOCOUNT ON; ${query};`;
 
-  const args = ['-S', instance, '-E', '-C', '-d', database, '-Q', wrappedQuery, '-h', '-1', '-W'];
+  // -y 0 = columnas de ancho ilimitado (evita truncar JSON en 255 chars)
+  // No se puede combinar con -h ni -W, así que filtramos headers manualmente
+  const args = ['-S', instance, '-E', '-C', '-d', database, '-Q', wrappedQuery, '-y', '0'];
 
   const { stdout, stderr } = await execFileAsync('sqlcmd', args, {
     windowsHide: true,
-    maxBuffer: 1024 * 1024
+    maxBuffer: 10 * 1024 * 1024  // 10 MB
   });
 
   if (stderr && stderr.trim()) {
@@ -73,16 +76,35 @@ const runSqlServerQuery = async (database, sql, params = []) => {
     return [[], { affectedRows: 0 }];
   }
 
-  const raw = (stdout || '').trim();
-  if (!raw) return [[], {}];
+  // Con -y 0 (sin -h -1), sqlcmd incluye cabeceras. El JSON de FOR JSON PATH
+  // aparece en la línea que empieza con '['. Unimos líneas consecutivas de JSON
+  // por si el output se partiera en varias líneas.
+  const lines = (stdout || '').split(/\r?\n/);
+  const jsonLines = [];
+  let capturing = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!capturing && t.startsWith('[')) { capturing = true; }
+    if (capturing && t) { jsonLines.push(t); }
+    // Dejamos de capturar al llegar a una línea vacía después de haber capturado algo
+    if (capturing && !t && jsonLines.length > 0) break;
+  }
+  const raw = jsonLines.join('');
+  console.log(`[DB ${database}] stdout_len=${stdout?.length} json_raw_len=${raw.length} preview=${raw.substring(0,200)}`);
 
-  const jsonStart = raw.indexOf('[');
-  if (jsonStart < 0) {
-    throw new Error(`No se pudo parsear respuesta SQL Server: ${raw}`);
+  if (!raw) {
+    // FOR JSON PATH devuelve NULL si no hay filas
+    console.log(`[DB ${database}] Sin datos JSON en la salida`);
+    return [[], {}];
   }
 
-  const jsonText = raw.slice(jsonStart);
-  const rows = JSON.parse(jsonText);
+  // Detectar errores SQL en stdout (Msg XXXX)
+  if (/Msg\s+\d+/.test(raw)) {
+    throw new Error(raw.replace(/\s+/g, ' ').slice(0, 500));
+  }
+
+  const rows = JSON.parse(raw);
+  console.log(`[DB ${database}] rows parsed: ${rows.length}`);
   return [rows, {}];
 };
 

@@ -57,28 +57,46 @@ const runSqlServerQuery = async (database, sql, params = []) => {
     ? `SET NOCOUNT ON; ${query} FOR JSON PATH, INCLUDE_NULL_VALUES;`
     : `SET NOCOUNT ON; ${query};`;
 
-  const args = ['-S', instance, '-E', '-C', '-d', database, '-Q', wrappedQuery, '-h', '-1', '-W'];
+  const normalizedQuery = wrappedQuery.replace(/[\r\n\t]+/g, ' ');
+  const args = ['-S', instance, '-E', '-C', '-d', database, '-Q', normalizedQuery, '-y', '0'];
+
+  if (!isSelect) {
+    console.log(`[DB EXEC] ${database} | CMD: sqlcmd ${args.join(' ')}`);
+  }
 
   const { stdout, stderr } = await execFileAsync('sqlcmd', args, {
     windowsHide: true,
-    maxBuffer: 1024 * 1024
+    maxBuffer: 4 * 1024 * 1024
   });
 
-  if (stderr && stderr.trim()) {
-    throw new Error(stderr.trim());
+  if (!isSelect) {
+    console.log(`[DB EXEC] stdout: ${JSON.stringify(stdout)} | stderr: ${JSON.stringify(stderr)}`);
+  }
+
+  const stderrClean = (stderr || '').trim();
+  if (stderrClean && /error|failed/i.test(stderrClean)) {
+    throw new Error(stderrClean);
+  }
+
+  // Detectar errores SQL en stdout (aplica tanto a SELECT como INSERT/UPDATE)
+  const rawAll = (stdout || '').replace(/\r\n/g, '\n').trim();
+  if (rawAll && /Msg\s+\d+/i.test(rawAll)) {
+    throw new Error(`SQL Server error: ${rawAll.split('\n')[0]}`);
   }
 
   if (!isSelect) {
     return [[], { affectedRows: 0 }];
   }
 
-  const raw = (stdout || '').trim();
+  const raw = (stdout || '').replace(/\r\n/g, '\n').trim();
   if (!raw) return [[], {}];
 
-  const jsonStart = raw.indexOf('[');
-  if (jsonStart < 0) {
-    throw new Error(`No se pudo parsear respuesta SQL Server: ${raw}`);
+  if (/Msg\s+\d+/.test(raw)) {
+    throw new Error(`SQL Server error: ${raw.split('\n')[0]}`);
   }
+
+  const jsonStart = raw.indexOf('[');
+  if (jsonStart < 0) return [[], {}];
 
   const jsonText = raw.slice(jsonStart);
   const rows = JSON.parse(jsonText);

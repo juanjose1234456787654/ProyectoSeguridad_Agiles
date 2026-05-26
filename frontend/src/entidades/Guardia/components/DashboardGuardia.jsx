@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import guardiaService from '../services/guardiaService';
@@ -12,10 +12,16 @@ const DashboardGuardia = () => {
 	const [errorAlertas, setErrorAlertas] = useState('');
 	const [avisoTiempoReal, setAvisoTiempoReal] = useState('');
 	const [sidebarAbierto, setSidebarAbierto] = useState(true);
+	const [menuAbierto, setMenuAbierto] = useState(false);
+	const [seccionActiva, setSeccionActiva] = useState('alertas'); // 'alertas' | 'contactos'
+	const menuRef = useRef(null);
 
 	const [idEstado, setIdEstado] = useState(null);
 	const [enServicio, setEnServicio] = useState(false);
 	const [guardandoEstado, setGuardandoEstado] = useState(false);
+	const [asignando, setAsignando] = useState(null); // id del incidente que se está asignando
+	const [avisoAsignacion, setAvisoAsignacion] = useState('');
+	const [avisoEstado, setAvisoEstado] = useState('');
 
 	const idUsuarioGuardia = user?.id;
 
@@ -57,6 +63,15 @@ const DashboardGuardia = () => {
 		cargarAlertas();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [idUsuarioGuardia]);
+
+	// Cerrar menú desplegable al hacer click fuera
+	useEffect(() => {
+		const handler = (e) => {
+			if (menuRef.current && !menuRef.current.contains(e.target)) setMenuAbierto(false);
+		};
+		document.addEventListener('mousedown', handler);
+		return () => document.removeEventListener('mousedown', handler);
+	}, []);
 
 	useEffect(() => {
 		if (!user?.token) return undefined;
@@ -109,24 +124,66 @@ const DashboardGuardia = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [idUsuarioGuardia]);
 
-	const onToggleServicio = async () => {
+	const onCambiarServicio = async (nuevoValor) => {
 		if (!idUsuarioGuardia || guardandoEstado) return;
 
+		setAvisoEstado('');
 		try {
 			setGuardandoEstado(true);
-			const siguiente = !enServicio;
 			const response = await guardiaService.setEstadoGuardia({
 				idEstado,
-				enServicio: siguiente,
+				enServicio: nuevoValor,
 				idUsuario: idUsuarioGuardia
 			});
 
-			setEnServicio(siguiente);
+			setEnServicio(nuevoValor);
 			if (!idEstado && response?.id) {
 				setIdEstado(response.id);
 			}
+			const etiqueta = nuevoValor ? 'En Servicio' : 'No en Servicio';
+			setAvisoEstado(`✓ Estado guardado: ${etiqueta}`);
+			setTimeout(() => setAvisoEstado(''), 4000);
+		} catch (e) {
+			const msg = e?.response?.data?.message || e?.message || 'Error al guardar el estado';
+			setAvisoEstado(`✗ ${msg}`);
 		} finally {
 			setGuardandoEstado(false);
+		}
+	};
+
+	const onAsignar = async (idIncidente) => {
+		if (!idUsuarioGuardia || asignando) return;
+
+		try {
+			setAsignando(idIncidente);
+			setAvisoAsignacion('');
+
+			let estadoId = idEstado;
+			if (!estadoId) {
+				const response = await guardiaService.setEstadoGuardia({
+					idEstado: null,
+					enServicio: true,
+					idUsuario: idUsuarioGuardia
+				});
+				estadoId = response?.id || null;
+				if (estadoId) {
+					setIdEstado(estadoId);
+					setEnServicio(true);
+				}
+			}
+
+			if (!estadoId) {
+				setAvisoAsignacion('No se pudo obtener el estado del guardia. Intenta de nuevo.');
+				return;
+			}
+
+			await guardiaService.asignarAlerta({ idIncidente, idEstadoGuardia: estadoId });
+			setAvisoAsignacion(`Alerta ${idIncidente} asignada correctamente.`);
+			setTimeout(() => setAvisoAsignacion(''), 5000);
+		} catch (e) {
+			setAvisoAsignacion(e?.response?.data?.message || 'Error al asignar la alerta.');
+		} finally {
+			setAsignando(null);
 		}
 	};
 
@@ -188,6 +245,11 @@ const DashboardGuardia = () => {
 				<div style={{ padding: '1rem', overflow: 'auto', flex: 1 }}>
 					{loadingAlertas && <p style={{ textAlign: 'center', color: '#999' }}>Cargando...</p>}
 					{errorAlertas && <p style={{ color: '#b91c1c', fontSize: '0.9rem' }}>{errorAlertas}</p>}
+					{avisoAsignacion && (
+						<p style={{ color: avisoAsignacion.includes('correctamente') ? '#059669' : '#b91c1c', fontSize: '0.85rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+							{avisoAsignacion}
+						</p>
+					)}
 
 					{!loadingAlertas && resumen.activas === 0 && (
 						<p style={{ textAlign: 'center', color: '#999', fontSize: '0.9rem' }}>
@@ -203,10 +265,7 @@ const DashboardGuardia = () => {
 								borderRadius: '8px',
 								padding: '0.9rem',
 								marginBottom: '0.75rem',
-								background: '#fafafa',
-								cursor: 'pointer',
-								transition: 'all 0.2s',
-								':hover': { background: '#f0f0f0' }
+								background: '#fafafa'
 							}}
 							onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
 							onMouseLeave={(e) => (e.currentTarget.style.background = '#fafafa')}
@@ -220,11 +279,29 @@ const DashboardGuardia = () => {
 							<p style={{ margin: '0.3rem 0', fontSize: '0.85rem', color: '#555' }}>
 								<strong>Reportó:</strong> {alerta.emailUsuario || alerta.idUsuario || 'Sin dato'}
 							</p>
+							<button
+								onClick={() => onAsignar(alerta.id)}
+								disabled={asignando === alerta.id}
+								style={{
+									width: '100%',
+									marginTop: '0.6rem',
+									padding: '0.45rem',
+									background: asignando === alerta.id ? '#9ca3af' : '#059669',
+									color: '#fff',
+									border: 'none',
+									borderRadius: '6px',
+									cursor: asignando === alerta.id ? 'not-allowed' : 'pointer',
+									fontSize: '0.85rem',
+									fontWeight: '600'
+								}}
+							>
+								{asignando === alerta.id ? 'Asignando...' : 'Asignarlo'}
+							</button>
 							<Link to={`/guardia/cerrar/${alerta.id}`} style={{ textDecoration: 'none' }}>
 								<button
 									style={{
 										width: '100%',
-										marginTop: '0.6rem',
+										marginTop: '0.4rem',
 										padding: '0.45rem',
 										background: '#21335b',
 										color: '#fff',
@@ -275,17 +352,107 @@ const DashboardGuardia = () => {
 							<h1 style={{ margin: 0, fontSize: '1.3rem' }}>Panel de Guardia</h1>
 						</div>
 						<div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-							<label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', cursor: 'pointer' }}>
-								<input type="checkbox" checked={enServicio} onChange={onToggleServicio} disabled={guardandoEstado} />
-								<span style={{ fontSize: '0.9rem' }}>
-									{guardandoEstado ? 'Guardando...' : enServicio ? 'En Servicio' : 'No en Servicio'}
-								</span>
-							</label>
+							{/* Menú desplegable */}
+							<div ref={menuRef} style={{ position: 'relative' }}>
+								<button
+									onClick={() => setMenuAbierto(v => !v)}
+									style={{
+										padding: '0.5rem 1rem',
+										background: menuAbierto ? '#21335b' : '#f1f5f9',
+										color: menuAbierto ? '#fff' : '#21335b',
+										border: '1px solid #21335b',
+										borderRadius: '6px',
+										cursor: 'pointer',
+										fontWeight: '600',
+										fontSize: '0.88rem',
+										display: 'flex',
+										alignItems: 'center',
+										gap: '0.4rem'
+									}}
+								>
+									☰ Menú {menuAbierto ? '▲' : '▼'}
+								</button>
+								{menuAbierto && (
+									<div style={{
+										position: 'absolute',
+										top: 'calc(100% + 6px)',
+										right: 0,
+										background: '#fff',
+										border: '1px solid #e2e8f0',
+										borderRadius: '8px',
+										boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+										minWidth: '200px',
+										zIndex: 200,
+										overflow: 'hidden'
+									}}>
+										{[
+											{ id: 'alertas', icono: '🔔', label: 'Alertas Activas' },
+											{ id: 'contactos', icono: '👥', label: 'Contactos de Confianza' }
+										].map(op => (
+											<button
+												key={op.id}
+												onClick={() => { setSeccionActiva(op.id); setMenuAbierto(false); }}
+												style={{
+													display: 'flex',
+													alignItems: 'center',
+													gap: '0.6rem',
+													width: '100%',
+													padding: '0.7rem 1rem',
+													border: 'none',
+													background: seccionActiva === op.id ? '#eff6ff' : '#fff',
+													color: seccionActiva === op.id ? '#1d4ed8' : '#374151',
+													fontWeight: seccionActiva === op.id ? '700' : '400',
+													cursor: 'pointer',
+													fontSize: '0.9rem',
+													textAlign: 'left',
+													borderBottom: '1px solid #f1f5f9'
+												}}
+											>
+												{op.icono} {op.label}
+											</button>
+										))}
+									</div>
+								)}
+							</div>
+							<div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+								<label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', cursor: 'pointer', fontSize: '0.9rem' }}>
+									<input
+										type="radio"
+										name="estadoServicio"
+										value="en"
+										checked={enServicio}
+										onChange={() => onCambiarServicio(true)}
+										disabled={guardandoEstado}
+									/>
+									{guardandoEstado && enServicio ? 'Guardando...' : 'En Servicio'}
+								</label>
+								<label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', cursor: 'pointer', fontSize: '0.9rem' }}>
+									<input
+										type="radio"
+										name="estadoServicio"
+										value="no"
+										checked={!enServicio}
+										onChange={() => onCambiarServicio(false)}
+										disabled={guardandoEstado}
+									/>
+									{guardandoEstado && !enServicio ? 'Guardando...' : 'No en Servicio'}
+								</label>
+							</div>
 							<button onClick={logout} style={{ padding: '0.6rem 1rem', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
 								Salir
 							</button>
 						</div>
 					</header>
+					{avisoEstado && (
+						<div style={{
+							marginTop: '0.5rem',
+							fontSize: '0.82rem',
+							fontWeight: 600,
+							color: avisoEstado.startsWith('✓') ? '#059669' : '#b91c1c'
+						}}>
+							{avisoEstado}
+						</div>
+					)}
 				</div>
 
 				{/* NOTIFICACIÓN EN TIEMPO REAL */}
@@ -306,8 +473,8 @@ const DashboardGuardia = () => {
 
 				{/* ALERTAS USUARIO COMPONENT */}
 				<div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
-					<AlertasUsuario />
-					<ContactosConfianza />
+					{seccionActiva === 'alertas' && <AlertasUsuario />}
+					{seccionActiva === 'contactos' && <ContactosConfianza />}
 				</div>
 			</main>
 		</div>

@@ -6,10 +6,12 @@ import guardiaService from '../../Guardia/services/guardiaService';
 import alertaService from '../../Guardia/services/alertaService';
 import EstadisticasPanel from './EstadisticasPanel';
 import GestionUsuarios from './GestionUsuarios';
+import GuardiasEstado from './GuardiasEstado';
 import '../styles/DashboardAdmin.css';
 
 const SECCIONES_MENU = [
-  { id: 'usuarios', icono: '👥', label: 'Gestión de Usuarios' },
+  { id: 'usuarios',  icono: '👥', label: 'Gestión de Usuarios' },
+  { id: 'guardias',  icono: '🛡️', label: 'Guardias En Servicio' },
   { id: 'estadisticas', icono: '📊', label: 'Estadísticas' }
 ];
 
@@ -20,7 +22,9 @@ const DashboardAdmin = () => {
   const [zonasApi, setZonasApi] = useState([]);
   const [sidebarAbierto, setSidebarAbierto] = useState(true);
   const [seccionActiva, setSeccionActiva] = useState('usuarios');
+  const [guardiaRefreshKey, setGuardiaRefreshKey] = useState(0);
   const socketRef = useRef(null);
+  const socketSeguridadRef = useRef(null);
 
   const cargarAlertas = async () => {
     try {
@@ -55,6 +59,23 @@ const DashboardAdmin = () => {
     socketRef.current.on('incidente:actualizado', () => { cargarAlertas(); });
 
     return () => socketRef.current?.disconnect();
+  }, []);
+
+  // Socket directo a MS-SEGURIDAD para cambios de estado de guardias en tiempo real
+  useEffect(() => {
+    socketSeguridadRef.current = io('http://localhost:4003', {
+      transports: ['websocket']
+    });
+    socketSeguridadRef.current.on('connect', () => {
+      console.log('[SOCKET SEGURIDAD] conectado al admin');
+    });
+    socketSeguridadRef.current.on('connect_error', (err) => {
+      console.warn('[SOCKET SEGURIDAD] error de conexión:', err.message);
+    });
+    socketSeguridadRef.current.on('guardia:estadoCambiado', () => {
+      setGuardiaRefreshKey(k => k + 1);
+    });
+    return () => socketSeguridadRef.current?.disconnect();
   }, []);
 
   const seleccionarSeccion = (id) => {
@@ -147,6 +168,7 @@ const DashboardAdmin = () => {
           <div className="da-panel-content">
             {seccionActiva === 'estadisticas' && <EstadisticasPanel />}
             {seccionActiva === 'usuarios'     && <GestionUsuarios />}
+            {seccionActiva === 'guardias'     && <GuardiasEstado refreshKey={guardiaRefreshKey} />}
           </div>
         </section>
       </main>

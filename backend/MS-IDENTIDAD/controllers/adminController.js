@@ -3,11 +3,13 @@ const Usuario = require('../models/Usuario');
 // GET /api/identidad/usuarios  – solo Administrador
 const getUsuarios = async (req, res) => {
   try {
+    console.log('[getUsuarios] Iniciando...');
     const usuarios = await Usuario.findAll();
+    console.log(`[getUsuarios] Resultado: ${usuarios.length} usuarios`);
     res.json(usuarios);
   } catch (error) {
-    console.error('[getUsuarios]', error);
-    res.status(500).json({ message: 'Error al obtener usuarios' });
+    console.error('[getUsuarios] ERROR:', error.message);
+    res.status(500).json({ message: `Error al obtener usuarios: ${error.message}` });
   }
 };
 
@@ -44,4 +46,15 @@ const bloquearUsuario = async (req, res) => {
   }
 };
 
-module.exports = { getUsuarios, updateUsuario, bloquearUsuario };
+// DELETE /api/identidad/usuarios/:id  – solo Administrador
+const deleteUsuario = async (req, res) => {
+  try {
+    await Usuario.deleteById(req.params.id);
+    res.json({ message: 'Usuario eliminado correctamente' });
+  } catch (error) {
+    console.error('[deleteUsuario]', error);
+    res.status(500).json({ message: `Error al eliminar usuario: ${error.message}` });
+  }
+};
+
+module.exports = { getUsuarios, updateUsuario, bloquearUsuario, deleteUsuario };

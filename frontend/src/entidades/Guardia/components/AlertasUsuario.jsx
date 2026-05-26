@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import alertaService from '../services/alertaService';
+import contactosService from '../services/contactosService';
 import notificacionesService from '../services/notificacionesService';
 import { NotificacionesContainer } from './NotificacionToast';
 import MapaCampus from './MapaCampus';
@@ -158,6 +159,11 @@ const AlertasUsuario = () => {
 						return existe ? soloMias : [...soloMias, payload];
 					});
 					setNotice('Alerta emitida correctamente.');
+
+					// Notificar a contactos y grupos de confianza por correo (HU-4)
+					contactosService.alertarContactos(payload.motivo).catch((err) => {
+						console.warn('[alertar contactos]', err?.response?.data?.message || err.message);
+					});
 				}
 
 				// Notificar a guardias y al resto de usuarios sobre alertas ajenas
@@ -341,8 +347,8 @@ const AlertasUsuario = () => {
 							disabled={enviando}
 						>
 							<option value="Robo">Robo</option>
-							<option value="Agresión Verbal">Agresión Verbal</option>
-							<option value="Agresión Física">Agresión Física</option>
+							<option value="Agresion Verbal">Agresion Verbal</option>
+							<option value="Agresion Fisica">Agresion Fisica</option>
 						</select>
 					</label>
 

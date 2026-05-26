@@ -17,8 +17,8 @@ router.get('/guardia/:idUsuario/activas', authorize('Administrador', 'Guardia'),
 // GET  /api/seguridad/alertas/:id     → Administrador y Guardia
 router.get('/:id', authorize('Administrador', 'Guardia'), getById);
 
-// POST /api/seguridad/alertas         → solo Administrador asigna alertas
-router.post('/', authorize('Administrador'), create);
+// POST /api/seguridad/alertas         → Administrador o Guardia asigna alertas
+router.post('/', authorize('Administrador', 'Guardia'), create);
 
 // DELETE /api/seguridad/alertas/:id   → solo Administrador elimina
 router.delete('/:id', authorize('Administrador'), remove);

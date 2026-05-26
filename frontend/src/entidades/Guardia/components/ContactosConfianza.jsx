@@ -195,11 +195,9 @@ const ContactosConfianza = () => {
   const [mostrarFormGrupo, setMostrarFormGrupo] = useState(false);
   const [grupoEditando, setGrupoEditando] = useState(null);
 
-  // Estado de alerta de confianza
-  const [alertando, setAlertando] = useState(false);
-  const [alertaMsg, setAlertaMsg] = useState('');
-  const [alertaResultado, setAlertaResultado] = useState(null);
-  const [alertaError, setAlertaError] = useState('');
+  // Estado de alerta de confianza — reservado para uso futuro
+  const [alertaResultado] = useState(null);
+  const [alertaError] = useState('');
 
   // Carga general
   const [cargando, setCargando] = useState(false);
@@ -301,22 +299,6 @@ const ContactosConfianza = () => {
     setMostrarFormGrupo(true);
   };
 
-  // ── Alertar a contactos ─────────────────────────────────────────────────────
-
-  const enviarAlerta = async () => {
-    setAlertando(true);
-    setAlertaResultado(null);
-    setAlertaError('');
-    try {
-      const resultado = await contactosService.alertarContactos(alertaMsg);
-      setAlertaResultado(resultado);
-    } catch (e) {
-      setAlertaError(e?.response?.data?.message || 'No se pudo enviar la alerta');
-    } finally {
-      setAlertando(false);
-    }
-  };
-
   const totalContactos = contactos.length + grupos.reduce((s, g) => s + (g.integrantes?.length || 0), 0);
   const correosExistentes = contactos.map((c) => c.correo || c.COR_PER_REF);
 
@@ -352,17 +334,6 @@ const ContactosConfianza = () => {
             Personas a quienes se notificará automáticamente si activas una alerta de emergencia.
           </p>
         </div>
-
-        {/* Botón de alerta a contactos */}
-        <button
-          type="button"
-          className="cc-btn-alerta"
-          onClick={enviarAlerta}
-          disabled={alertando || totalContactos === 0}
-          title={totalContactos === 0 ? 'Agrega al menos un contacto para poder alertar' : ''}
-        >
-          {alertando ? 'Enviando…' : '🚨 Alertar a mis contactos'}
-        </button>
       </header>
 
       {alertaResultado && (
@@ -373,26 +344,12 @@ const ContactosConfianza = () => {
       )}
       {alertaError && <div className="cc-alerta-resultado cc-alerta-resultado--err">{alertaError}</div>}
 
-      {/* Área de mensaje opcional para la alerta */}
-      {totalContactos > 0 && (
-        <div className="cc-alerta-msg-wrap">
-          <input
-            type="text"
-            className="cc-input"
-            value={alertaMsg}
-            onChange={(e) => setAlertaMsg(e.target.value)}
-            placeholder="Mensaje adicional (opcional)…"
-            maxLength={200}
-          />
-        </div>
-      )}
-
       {/* Pestañas */}
       <nav className="cc-tabs" role="tablist">
         <button
           role="tab"
           className={`cc-tab ${tab === 'contactos' ? 'cc-tab--active' : ''}`}
-          onClick={() => setTab('contactos')}
+          onClick={() => { setTab('contactos'); setFiltro(''); }}
           aria-selected={tab === 'contactos'}
         >
           Individuales
@@ -419,19 +376,15 @@ const ContactosConfianza = () => {
       )}
       {cargando && <p className="cc-loading">Cargando…</p>}
 
-      {/* Filtro local de la lista ya cargada */}
-      {!cargando && !errorGlobal && (contactos.length > 0 || grupos.length > 0) && (
+      {/* Filtro local — solo visible en la pestaña Grupos */}
+      {!cargando && !errorGlobal && tab === 'grupos' && grupos.length > 0 && (
         <div className="cc-filtro-wrap">
           <input
             type="text"
             className="cc-input cc-filtro__input"
             value={filtro}
             onChange={(e) => setFiltro(e.target.value)}
-            placeholder={
-              tab === 'contactos'
-                ? 'Filtrar contactos por nombre o correo…'
-                : 'Filtrar grupos por nombre o integrante…'
-            }
+            placeholder="Filtrar grupos por nombre o integrante…"
           />
           {filtro && (
             <button type="button" className="cc-filtro__clear" onClick={() => setFiltro('')} aria-label="Limpiar filtro">

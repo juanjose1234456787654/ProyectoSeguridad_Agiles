@@ -30,6 +30,9 @@ const handleResponse = async (res) => {
 export const getEstadisticas = () =>
   fetch(`${API}/incidentes/estadisticas`, { headers: authHeaders() }).then(handleResponse);
 
+export const getHistorial = () =>
+  fetch(`${API}/estadisticas/historial`, { headers: authHeaders() }).then(handleResponse);
+
 // ── Gestión de usuarios ───────────────────────────────────────────────────────
 
 export const getUsuarios = () =>
@@ -49,7 +52,14 @@ export const bloquearUsuario = (id, bloqueado) =>
     body: JSON.stringify({ bloqueado })
   }).then(handleResponse);
 
-// ── Contactos de confianza de un usuario (para ver desde Admin) ───────────────
+export const deleteUsuario = (id) =>
+  fetch(`${API}/identidad/usuarios/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders()
+  }).then(handleResponse);
+
+export const getGuardiasEstado = () =>
+  fetch(`${API}/seguridad/guardias`, { headers: authHeaders() }).then(handleResponse);
 
 export const getContactosDeUsuario = (idUsuario) =>
   fetch(`${API}/contactos?idUsuario=${encodeURIComponent(idUsuario)}`, {

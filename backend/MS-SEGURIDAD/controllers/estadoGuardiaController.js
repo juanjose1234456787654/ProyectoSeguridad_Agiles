@@ -41,15 +41,22 @@ const create = async (req, res) => {
   try {
     const { estado, horario, idUsuario } = req.body;
 
+    console.log('[ESTADO_GUARDIAS CREATE] body:', req.body);
+
     if (!estado || !horario || !idUsuario) {
       return res.status(400).json({ message: 'Faltan campos obligatorios: estado, horario, idUsuario' });
     }
 
     const nuevo = await EstadoGuardia.create({ estado, horario, idUsuario });
+    console.log('[ESTADO_GUARDIAS CREATE] OK:', nuevo);
+
+    const io = req.app.get('io');
+    if (io) io.emit('guardia:estadoCambiado', nuevo);
+
     res.status(201).json(nuevo);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error al registrar estado de guardia' });
+    console.error('[ESTADO_GUARDIAS CREATE] ERROR:', error.message);
+    res.status(500).json({ message: error.message || 'Error al registrar estado de guardia' });
   }
 };
 
@@ -63,15 +70,22 @@ const update = async (req, res) => {
 
     const { estado, horario, idUsuario } = req.body;
 
+    console.log('[ESTADO_GUARDIAS UPDATE] id:', req.params.id, 'body:', req.body);
+
     if (!estado || !horario || !idUsuario) {
       return res.status(400).json({ message: 'Faltan campos obligatorios: estado, horario, idUsuario' });
     }
 
     const actualizado = await EstadoGuardia.update(req.params.id, { estado, horario, idUsuario });
+    console.log('[ESTADO_GUARDIAS UPDATE] OK:', actualizado);
+
+    const io = req.app.get('io');
+    if (io) io.emit('guardia:estadoCambiado', actualizado);
+
     res.json(actualizado);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error al actualizar estado de guardia' });
+    console.error('[ESTADO_GUARDIAS UPDATE] ERROR:', error.message);
+    res.status(500).json({ message: error.message || 'Error al actualizar estado de guardia' });
   }
 };
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getUsuarios, updateUsuario, bloquearUsuario } from '../services/adminService';
+import { getUsuarios, updateUsuario, bloquearUsuario, deleteUsuario } from '../services/adminService';
 import '../styles/GestionUsuarios.css';
 
 const ROLES = [
@@ -15,7 +15,7 @@ const GestionUsuarios = () => {
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  const [editando, setEditando] = useState(null);   // { id, email, rolCodigo }
+  const [editando, setEditando] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [aviso, setAviso] = useState('');
 
@@ -58,10 +58,21 @@ const GestionUsuarios = () => {
 
   const toggleBloqueo = async (u) => {
     const accion = u.bloqueado ? 'desbloquear' : 'bloquear';
-    if (!window.confirm(`¿Deseas ${accion} al usuario ${u.email}?`)) return;
+    if (!window.confirm(`¿Deseas ${accion} al usuario ${u.nombre || u.email}?`)) return;
     try {
       await bloquearUsuario(u.id, !u.bloqueado);
       mostrarAviso(`Usuario ${u.bloqueado ? 'desbloqueado' : 'bloqueado'} correctamente.`);
+      await cargar();
+    } catch (e) {
+      mostrarAviso(`Error: ${e.message}`);
+    }
+  };
+
+  const eliminarUsuario = async (u) => {
+    if (!window.confirm(`¿Eliminar al usuario ${u.nombre || u.email}? Esta acción no se puede deshacer.`)) return;
+    try {
+      await deleteUsuario(u.id);
+      mostrarAviso('Usuario eliminado correctamente.');
       await cargar();
     } catch (e) {
       mostrarAviso(`Error: ${e.message}`);
@@ -77,9 +88,16 @@ const GestionUsuarios = () => {
     );
   });
 
+  const renderConfianza = (u) => {
+    const items = [];
+    (u.contactos || []).forEach(c => items.push(c.alias || c.email));
+    (u.grupos || []).forEach(g => items.push(`Grupo: ${g.nombre}`));
+    if (items.length === 0) return <span className="gu-sin-confianza">Sin asignar</span>;
+    return <span className="gu-confianza-lista">{items.join(', ')}</span>;
+  };
+
   return (
     <div className="gu-root">
-      {/* Cabecera */}
       <div className="gu-header">
         <h2 className="gu-title">Gestión de Usuarios</h2>
         <button className="gu-btn-refresh" onClick={cargar} title="Recargar">↻</button>
@@ -88,7 +106,6 @@ const GestionUsuarios = () => {
       {aviso && <div className="gu-aviso">{aviso}</div>}
       {error && <div className="gu-error">{error} <button onClick={cargar}>Reintentar</button></div>}
 
-      {/* Búsqueda */}
       <input
         className="gu-busqueda"
         type="text"
@@ -106,20 +123,21 @@ const GestionUsuarios = () => {
           ) : (
             filtrados.map(u => (
               <div key={u.id} className={`gu-fila ${u.bloqueado ? 'gu-fila--bloqueado' : ''}`}>
-                {/* Info principal */}
                 <div className="gu-fila__info">
                   <div className="gu-fila__avatar">
                     {(u.nombre || u.email || '?')[0].toUpperCase()}
                   </div>
-                  <div>
-                    <p className="gu-fila__nombre">{u.nombre || u.email}</p>
-                    <p className="gu-fila__email">{u.nombre ? u.email : ''}</p>
+                  <div className="gu-fila__datos">
+                    <p className="gu-fila__nombre">{u.nombre || '(sin nombre)'}</p>
+                    <p className="gu-fila__email">{u.email}</p>
                     <span className={`gu-rol gu-rol--${u.rol?.toLowerCase()}`}>{u.rol}</span>
                     {u.bloqueado && <span className="gu-bloqueado-tag">🔒 Bloqueado</span>}
+                    <div className="gu-fila__confianza">
+                      <span className="gu-confianza-label">Confianza:</span> {renderConfianza(u)}
+                    </div>
                   </div>
                 </div>
 
-                {/* Acciones */}
                 <div className="gu-fila__acciones">
                   <button
                     className="gu-btn gu-btn--editar"
@@ -131,9 +149,15 @@ const GestionUsuarios = () => {
                   <button
                     className={`gu-btn ${u.bloqueado ? 'gu-btn--desbloquear' : 'gu-btn--bloquear'}`}
                     onClick={() => toggleBloqueo(u)}
-                    title={u.bloqueado ? 'Desbloquear' : 'Bloquear'}
                   >
                     {u.bloqueado ? '🔓 Desbloquear' : '🔒 Bloquear'}
+                  </button>
+                  <button
+                    className="gu-btn gu-btn--eliminar"
+                    onClick={() => eliminarUsuario(u)}
+                    title="Eliminar usuario"
+                  >
+                    🗑️ Eliminar
                   </button>
                 </div>
               </div>
@@ -142,7 +166,6 @@ const GestionUsuarios = () => {
         </div>
       )}
 
-      {/* Modal de edición */}
       {editando && (
         <div className="gu-modal-overlay" onClick={() => setEditando(null)}>
           <div className="gu-modal" onClick={e => e.stopPropagation()}>

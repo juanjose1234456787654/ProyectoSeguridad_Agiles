@@ -197,7 +197,7 @@ const Incidente = {
     return rows[0]?.idAsignacion || null;
   },
 
-  saveHistorialCierre: async ({ idIncidente, acciones }) => {
+  saveHistorialCierre: async ({ idIncidente, acciones, idGuardia }) => {
     const idAsignacion = await Incidente.getAsignacionIdByIncidente(idIncidente);
     if (!idAsignacion) {
       return { saved: false, reason: 'missing-asignacion' };
@@ -206,14 +206,14 @@ const Incidente = {
     const idHistorial = await getNextHistorialId();
     const fechaInicio = await getFechaInicioIncidente(idIncidente);
     const fechaCierre = toSqlDateTime(new Date());
-    const resultadoGuardia = `Acciones Realizadas: ${String(acciones || 'Sin detalle').trim()}`;
+    const resultadoGuardia = String(idGuardia || 'SIN_GUARDIA').trim();
+    const datosJsonValue = acciones ? JSON.stringify({ acciones }) : null;
 
     await db.query(
       `INSERT INTO [BD_ESTADISTICAS].dbo.HISTORIAL
         (ID_HIS, FEC_INI_HIS, FEC_CIE_HIS, RES_GUA_HIS, ID_ASI_REF, DATOS_JSON)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [idHistorial, fechaInicio, fechaCierre, resultadoGuardia, idAsignacion, null]
-    );
+      [idHistorial, fechaInicio, fechaCierre, resultadoGuardia, idAsignacion, datosJsonValue]);
 
     return {
       saved: true,

@@ -7,9 +7,9 @@ const emitRealtime = (req, eventName, payload) => {
   }
 };
 
-const registrarHistorialCierre = async ({ idIncidente, acciones }) => {
+const registrarHistorialCierre = async ({ idIncidente, acciones, idGuardia }) => {
   try {
-    const result = await Incidente.saveHistorialCierre({ idIncidente, acciones });
+    const result = await Incidente.saveHistorialCierre({ idIncidente, acciones, idGuardia });
     if (!result.saved) {
       console.warn(`[historial] No se guardó historial para ${idIncidente}: ${result.reason}`);
       return;
@@ -180,8 +180,9 @@ const close = async (req, res) => {
     }
 
     const { acciones } = req.body || {};
+    const idGuardia = req.usuario?.id || null;
     const cerrado = await Incidente.close(req.params.id, acciones || null);
-    await registrarHistorialCierre({ idIncidente: req.params.id, acciones });
+    await registrarHistorialCierre({ idIncidente: req.params.id, acciones, idGuardia });
     emitRealtime(req, 'incidente:cerrado', cerrado);
     res.json(cerrado);
   } catch (error) {

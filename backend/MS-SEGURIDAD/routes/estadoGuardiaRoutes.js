@@ -20,8 +20,8 @@ router.get('/:id', authorize('Administrador', 'Guardia'), getById);
 // POST /api/seguridad/guardias               → Guardia registra su propio estado
 router.post('/', authorize('Guardia', 'Administrador'), create);
 
-// PUT  /api/seguridad/guardias/:id           → solo Administrador edita
-router.put('/:id', authorize('Administrador'), update);
+// PUT  /api/seguridad/guardias/:id           → Administrador o el propio Guardia edita su estado
+router.put('/:id', authorize('Administrador', 'Guardia'), update);
 
 // DELETE /api/seguridad/guardias/:id         → solo Administrador elimina
 router.delete('/:id', authorize('Administrador'), remove);

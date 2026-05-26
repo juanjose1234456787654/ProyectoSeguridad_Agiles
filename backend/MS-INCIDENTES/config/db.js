@@ -68,6 +68,11 @@ const runSqlServerQuery = async (database, sql, params = []) => {
     throw new Error(stderr.trim());
   }
 
+  const rawAll = (stdout || '').replace(/\r\n/g, '\n').trim();
+  if (rawAll && /Msg\s+\d+/i.test(rawAll)) {
+    throw new Error(`SQL Server error: ${rawAll.split('\n')[0]}`);
+  }
+
   if (!isSelect) {
     return [[], { affectedRows: 0 }];
   }

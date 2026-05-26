@@ -3,7 +3,7 @@ import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
-import { getEstadisticas } from '../services/adminService';
+import { getEstadisticas, getHistorial } from '../services/adminService';
 import '../styles/EstadisticasPanel.css';
 
 const COLORES_PASTEL = ['#21335b', '#e53e3e', '#d69e2e', '#38a169', '#805ad5', '#3182ce', '#dd6b20'];
@@ -43,17 +43,19 @@ const CUSTOM_TOOLTIP_BARRA = ({ active, payload, label }) => {
 
 const EstadisticasPanel = () => {
   const [datos, setDatos] = useState(null);
+  const [historial, setHistorial] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
-  const [filtroMotivo, setFiltroMotivo] = useState(null); // para interactividad T5.4
+  const [filtroMotivo, setFiltroMotivo] = useState(null);
   const [filtroZona, setFiltroZona] = useState(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
     setError('');
     try {
-      const data = await getEstadisticas();
+      const [data, hist] = await Promise.all([getEstadisticas(), getHistorial()]);
       setDatos(data);
+      setHistorial(Array.isArray(hist) ? hist : []);
     } catch (e) {
       setError(e.message || 'Error al cargar estadísticas');
     } finally {
@@ -67,13 +69,7 @@ const EstadisticasPanel = () => {
   if (error)    return <div className="ep-error">{error} <button onClick={cargar}>Reintentar</button></div>;
   if (!datos)   return null;
 
-  // Filtrado interactivo (T5.4)
-  const cerradasFiltradas = datos.ultimasCerradas?.filter(a => {
-    if (filtroMotivo && a.motivo !== filtroMotivo) return false;
-    if (filtroZona && a.nombreZona !== filtroZona) return false;
-    return true;
-  }) ?? [];
-
+  // Filtrado interactivo (T5.4) — solo para los gráficos, el historial es independiente
   const hayFiltro = filtroMotivo || filtroZona;
 
   return (
@@ -159,48 +155,36 @@ const EstadisticasPanel = () => {
         </div>
       </div>
 
-      {/* ── Tabla historial cerradas ── */}
+      {/* ── Historial ── */}
       <div className="ep-card ep-card--full">
         <div className="ep-tabla-header">
-          <h3 className="ep-card__title">
-            Últimas Alertas Cerradas
-            {hayFiltro && (
-              <span className="ep-filtro-activo">
-                {filtroMotivo && `Tipo: ${filtroMotivo}`}
-                {filtroMotivo && filtroZona && ' · '}
-                {filtroZona && `Zona: ${filtroZona}`}
-              </span>
-            )}
-          </h3>
-          {hayFiltro && (
-            <button className="ep-btn-limpiar" onClick={() => { setFiltroMotivo(null); setFiltroZona(null); }}>
-              ✕ Limpiar filtros
-            </button>
-          )}
+          <h3 className="ep-card__title">Historial</h3>
         </div>
 
-        {cerradasFiltradas.length === 0 ? (
-          <p className="ep-empty">No hay alertas cerradas{hayFiltro ? ' con ese filtro' : ''}.</p>
+        {historial.length === 0 ? (
+          <p className="ep-empty">No hay registros en el historial.</p>
         ) : (
           <div className="ep-tabla-wrap">
             <table className="ep-tabla">
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Motivo</th>
-                  <th>Zona</th>
-                  <th>Usuario</th>
-                  <th>Acciones realizadas</th>
+                  <th>Fecha Inicio</th>
+                  <th>Fecha Cierre</th>
+                  <th>Guardia (ID)</th>
+                  <th>ID Asignacion</th>
+                  <th>Datos</th>
                 </tr>
               </thead>
               <tbody>
-                {cerradasFiltradas.map(a => (
-                  <tr key={a.id}>
-                    <td className="ep-td-id">{a.id}</td>
-                    <td><span className="ep-badge">{a.motivo}</span></td>
-                    <td>{a.nombreZona}</td>
-                    <td>{a.emailUsuario || '—'}</td>
-                    <td className="ep-td-acciones">{a.acciones || '—'}</td>
+                {historial.map(h => (
+                  <tr key={h.id}>
+                    <td className="ep-td-id">{h.id}</td>
+                    <td>{h.fechaInicio ? new Date(h.fechaInicio).toLocaleString('es-EC') : '—'}</td>
+                    <td>{h.fechaCierre ? new Date(h.fechaCierre).toLocaleString('es-EC') : '—'}</td>
+                    <td>{h.resultadoGuardia || '—'}</td>
+                    <td>{h.idAsignacion || '—'}</td>
+                    <td className="ep-td-acciones">{h.datosJson || '—'}</td>
                   </tr>
                 ))}
               </tbody>
