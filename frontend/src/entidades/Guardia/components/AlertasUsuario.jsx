@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import alertaService from '../services/alertaService';
+import notificacionesService from '../services/notificacionesService';
+import { NotificacionesContainer } from './NotificacionToast';
 import MapaCampus from './MapaCampus';
 import '../styles/AlertasUsuario.css';
+import '../styles/NotificacionToast.css';
 
 const ROLES_PERMITIDOS = ['Guardia', 'Estudiante', 'Docente', 'Personal'];
 const HOLD_DURATION_MS = 3000;
@@ -13,6 +16,49 @@ const AlertasUsuario = () => {
 	const [motivo, setMotivo] = useState('Robo');
 	const [estado, setEstado] = useState('Inactivo');
 	const [ultimaAlerta, setUltimaAlerta] = useState(null);
+
+	// Estado de notificaciones push/sonoras (HU-4)
+	const [toasts, setToasts] = useState([]);
+	const [permisoNotif, setPermisoNotif] = useState(() => notificacionesService.getPermission());
+	// Habilitadas/deshabilitadas por el usuario (persiste en sessionStorage)
+	const [notifHabilitadas, setNotifHabilitadas] = useState(() => {
+		const guardado = sessionStorage.getItem('notif_habilitadas');
+		return guardado === null ? true : guardado === 'true';
+	});
+	// Ref para que el handler del socket siempre lea el valor actualizado (evita stale closure)
+	const notifHabilitadasRef = useRef(notifHabilitadas);
+	useEffect(() => { notifHabilitadasRef.current = notifHabilitadas; }, [notifHabilitadas]);
+
+	const toggleNotificaciones = async () => {
+		// Pre-calentar el AudioContext aprovechando este gesto del usuario
+		notificacionesService.preinicializarAudio();
+
+		if (!notifHabilitadas) {
+			// Al activar: solicitar permiso si aún no fue concedido
+			if (notificacionesService.isSupported() && notificacionesService.getPermission() !== 'granted') {
+				const resultado = await notificacionesService.requestPermission();
+				setPermisoNotif(resultado);
+			}
+		}
+		setNotifHabilitadas((prev) => {
+			sessionStorage.setItem('notif_habilitadas', String(!prev));
+			return !prev;
+		});
+	};
+
+	const agregarToast = (payload) => {
+		const toast = {
+			id: payload.id || `${Date.now()}`,
+			nombreEmisor: payload.nombreUsuario || '',
+			emailEmisor: payload.emailUsuario || payload.idUsuario || '',
+			motivo: payload.motivo,
+			nombreZona: payload.nombreZona || '',
+			timestamp: payload.timestamp || new Date().toISOString()
+		};
+		setToasts((prev) => [...prev.slice(-3), toast]); // máx 4 toasts simultáneos
+	};
+
+	const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
 	const [misAlertas, setMisAlertas] = useState([]);
 	const [alertasParaMapa, setAlertasParaMapa] = useState([]);
 	const [zonasApi, setZonasApi] = useState([]);
@@ -114,8 +160,20 @@ const AlertasUsuario = () => {
 					setNotice('Alerta emitida correctamente.');
 				}
 
-				if (user.rol === 'Guardia' && !esMiAlerta) {
+				// Notificar a guardias y al resto de usuarios sobre alertas ajenas
+				if (!esMiAlerta) {
 					setNotice('Nueva alerta detectada en el sistema.');
+					// Toast visual + sonido + notificación del SO (HU-4: T3.2, T3.3)
+					// Solo si el usuario tiene las notificaciones habilitadas
+					if (notifHabilitadasRef.current) {
+						agregarToast(payload);
+						notificacionesService.notificar({
+							nombreEmisor: payload.nombreUsuario || '',
+							emailEmisor: payload.emailUsuario || payload.idUsuario || '',
+							motivo: payload.motivo,
+							nombreZona: payload.nombreZona || ''
+						});
+					}
 				}
 
 				// Actualizar mapa con nueva alerta
@@ -220,8 +278,38 @@ const AlertasUsuario = () => {
 		return <div className="alertas-shell"><p>No autorizado para esta interfaz.</p></div>;
 	}
 
+	/* Solicitar permiso de notificaciones al montar (HU-4) */
+	useEffect(() => {
+		if (notificacionesService.isSupported() && notificacionesService.getPermission() === 'default') {
+			notificacionesService.requestPermission().then(setPermisoNotif);
+		}
+	}, []);
+
 	return (
 		<div className="alertas-shell">
+			{/* TOASTS DE ALERTA EN TIEMPO REAL (HU-4 – T3.2) */}
+			<NotificacionesContainer notificaciones={toasts} onDismiss={dismissToast} />
+
+			{/* BOTÓN TOGGLE NOTIFICACIONES – siempre visible si el navegador las soporta */}
+			{notificacionesService.isSupported() && (
+				<div className={`nt-permiso-banner ${!notifHabilitadas ? 'nt-permiso-banner--off' : ''}`}>
+					{permisoNotif === 'denied' ? (
+						<span>Las notificaciones están bloqueadas en tu navegador. Actívalas desde la configuración del sitio.</span>
+					) : (
+						<span>
+							{notifHabilitadas
+								? 'Las notificaciones de emergencia están activas.'
+								: 'Las notificaciones de emergencia están desactivadas.'}
+						</span>
+					)}
+					{permisoNotif !== 'denied' && (
+						<button type="button" onClick={toggleNotificaciones}>
+							{notifHabilitadas ? 'Desactivar Notificaciones' : 'Activar Notificaciones'}
+						</button>
+					)}
+				</div>
+			)}
+
 			{/* MAPA INTERACTIVO DEL CAMPUS UTA – solo visible para Guardia de Seguridad */}
 			{user?.rol === 'Guardia' && (
 				<section className="guardia-head-card" aria-label="Mapa interactivo del campus UTA">

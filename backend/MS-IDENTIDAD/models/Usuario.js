@@ -164,7 +164,70 @@ const Usuario = {
     }
   },
 
-  ensureIdentityUserFromUta
+  ensureIdentityUserFromUta,
+
+  // ── Gestión de usuarios (Administrador) ────────────────────────────────────
+
+  /** Devuelve todos los usuarios de BD_IDENTIDAD enriquecidos con nombre de BD_UTA */
+  findAll: async () => {
+    const [rows] = await identidadDb.query(
+      `SELECT
+        u.ID_USU             AS id,
+        u.COR_INS_REF_USU    AS email,
+        u.ID_ROL_PER         AS rolCodigo,
+        r.NOM_ROL            AS rolNombre,
+        COALESCE(u.BLOQUEADO, 0) AS bloqueado
+       FROM USUARIOS u
+       LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER
+       ORDER BY u.ID_USU`
+    );
+
+    // Enriquecer con nombre de BD_UTA (best-effort)
+    const resultado = await Promise.all(rows.map(async (row) => {
+      let nombre = '';
+      try {
+        const utaUser = await findUtaUserByEmail(row.email);
+        nombre = utaUser?.nombre || '';
+      } catch { /* sin nombre */ }
+      return {
+        id: row.id,
+        email: row.email,
+        rolCodigo: row.rolCodigo,
+        rol: USER_FACING_ROLE_BY_NAME[row.rolNombre] || row.rolNombre || 'Desconocido',
+        nombre,
+        bloqueado: Boolean(row.bloqueado)
+      };
+    }));
+
+    return resultado;
+  },
+
+  /** Actualiza email y/o rol de un usuario */
+  update: async (id, { email, rolCodigo }) => {
+    const fields = [];
+    const params = [];
+    if (email)     { fields.push('COR_INS_REF_USU = ?'); params.push(email); }
+    if (rolCodigo) { fields.push('ID_ROL_PER = ?');       params.push(rolCodigo); }
+    if (fields.length === 0) return null;
+    params.push(id);
+    await identidadDb.query(`UPDATE USUARIOS SET ${fields.join(', ')} WHERE ID_USU = ?`, params);
+    const [rows] = await identidadDb.query(
+      `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, r.NOM_ROL AS rol
+       FROM USUARIOS u LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER WHERE u.ID_USU = ?`, [id]
+    );
+    return rows[0] || null;
+  },
+
+  /** Bloquea o desbloquea un usuario (campo BLOQUEADO BIT en USUARIOS) */
+  setBloqueado: async (id, bloqueado) => {
+    try {
+      await identidadDb.query('UPDATE USUARIOS SET BLOQUEADO = ? WHERE ID_USU = ?', [bloqueado ? 1 : 0, id]);
+      return { id, bloqueado };
+    } catch (e) {
+      // Si la columna no existe, informa al llamador
+      throw new Error('CAMPO_BLOQUEADO_NO_EXISTE');
+    }
+  }
 };
 
 module.exports = Usuario;

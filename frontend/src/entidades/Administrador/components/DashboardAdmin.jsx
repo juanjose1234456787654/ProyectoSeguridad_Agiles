@@ -1,150 +1,157 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
+import { useAuth } from '../../../contexts/AuthContext';
 import MapaCampus from '../../Guardia/components/MapaCampus';
 import guardiaService from '../../Guardia/services/guardiaService';
 import alertaService from '../../Guardia/services/alertaService';
+import EstadisticasPanel from './EstadisticasPanel';
+import GestionUsuarios from './GestionUsuarios';
 import '../styles/DashboardAdmin.css';
 
+const SECCIONES_MENU = [
+  { id: 'usuarios', icono: '👥', label: 'Gestión de Usuarios' },
+  { id: 'estadisticas', icono: '📊', label: 'Estadísticas' }
+];
+
 const DashboardAdmin = () => {
-	const [alertasActivas, setAlertasActivas] = useState([]);
-	const [zonasApi, setZonasApi] = useState([]);
+  const { logout } = useAuth();
 
-	const cargarAlertas = async () => {
-		try {
-			const data = await guardiaService.getIncidentesActivos();
-			setAlertasActivas(Array.isArray(data) ? data : []);
-		} catch {
-			// El mapa sigue visible aunque falle la carga de alertas
-		}
-	};
+  const [alertasActivas, setAlertasActivas] = useState([]);
+  const [zonasApi, setZonasApi] = useState([]);
+  const [sidebarAbierto, setSidebarAbierto] = useState(true);
+  const [seccionActiva, setSeccionActiva] = useState('usuarios');
+  const socketRef = useRef(null);
 
-	useEffect(() => {
-		cargarAlertas();
-		alertaService.getZonas()
-			.then(data => setZonasApi(Array.isArray(data) ? data : []))
-			.catch(() => {});
-	}, []);
+  const cargarAlertas = async () => {
+    try {
+      const data = await guardiaService.getIncidentesActivos();
+      setAlertasActivas(Array.isArray(data) ? data : []);
+    } catch { /* el mapa sigue visible */ }
+  };
 
-	useEffect(() => {
-		const socket = io('http://localhost:4000', {
-			transports: ['websocket']
-		});
+  useEffect(() => {
+    cargarAlertas();
+    alertaService.getZonas()
+      .then(data => setZonasApi(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
-		socket.on('incidente:creado', (payload) => {
-			if (!payload) return;
-			setAlertasActivas(prev => {
-				const existe = prev.some(a => a.id === payload.id);
-				return existe ? prev : [...prev, payload];
-			});
-		});
+  useEffect(() => {
+    socketRef.current = io('http://localhost:4000', { transports: ['websocket'] });
 
-		socket.on('incidente:cerrado', (payload) => {
-			if (!payload) return;
-			setAlertasActivas(prev => prev.filter(a => a.id !== payload.id));
-		});
+    socketRef.current.on('incidente:creado', (payload) => {
+      if (!payload) return;
+      setAlertasActivas(prev => {
+        const existe = prev.some(a => a.id === payload.id);
+        return existe ? prev : [...prev, payload];
+      });
+    });
 
-		socket.on('incidente:actualizado', () => {
-			cargarAlertas();
-		});
+    socketRef.current.on('incidente:cerrado', (payload) => {
+      if (!payload) return;
+      setAlertasActivas(prev => prev.filter(a => a.id !== payload.id));
+    });
 
-		return () => socket.disconnect();
-	}, []);
+    socketRef.current.on('incidente:actualizado', () => { cargarAlertas(); });
 
-	return (
-		<section className="dashboard-admin">
-			<h1 className="dashboard-admin__title">Panel del Administrador</h1>
-			<p className="dashboard-admin__text">Monitoreo en tiempo real del campus – Universidad Técnica de Ambato</p>
+    return () => socketRef.current?.disconnect();
+  }, []);
 
-			{/* MAPA INTERACTIVO CON ALERTAS EN TIEMPO REAL */}
-			<div
-				style={{
-					marginTop: '1.5rem',
-					background: '#fff',
-					border: '1px solid #d8deea',
-					borderRadius: '14px',
-					padding: '1.2rem',
-					boxShadow: '0 4px 16px rgba(33,51,91,0.08)'
-				}}
-			>
-				<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-					<div>
-						<h2 style={{ margin: 0, color: '#21335b', fontSize: '1.1rem' }}>
-							🗺 Mapa del Campus – Alertas en Tiempo Real
-						</h2>
-						<p style={{ margin: '0.3rem 0 0', color: '#6b7280', fontSize: '0.85rem' }}>
-							Campus Huachi, Ambato · 4 zonas monitoreadas
-						</p>
-					</div>
-					{alertasActivas.length > 0 && (
-						<span
-							style={{
-								background: '#dc2626',
-								color: '#fff',
-								padding: '0.4rem 1rem',
-								borderRadius: '20px',
-								fontWeight: 700,
-								fontSize: '0.9rem'
-							}}
-						>
-							{alertasActivas.length} Alerta{alertasActivas.length !== 1 ? 's' : ''} Activa{alertasActivas.length !== 1 ? 's' : ''}
-						</span>
-					)}
-				</div>
+  const seleccionarSeccion = (id) => {
+    setSeccionActiva(id);
+    if (!sidebarAbierto) setSidebarAbierto(true);
+  };
 
-				<div style={{ height: '460px' }}>
-					<MapaCampus alertas={alertasActivas} zonasApi={zonasApi} height="100%" />
-				</div>
-			</div>
+  return (
+    <div className="da-shell">
 
-			{/* RESUMEN DE ALERTAS ACTIVAS */}
-			{alertasActivas.length > 0 && (
-				<div
-					style={{
-						marginTop: '1.5rem',
-						background: '#fff',
-						border: '1px solid #d8deea',
-						borderRadius: '14px',
-						padding: '1.2rem',
-						boxShadow: '0 4px 16px rgba(33,51,91,0.08)'
-					}}
-				>
-					<h2 style={{ margin: '0 0 1rem', color: '#21335b', fontSize: '1.1rem' }}>
-						Incidentes Activos ({alertasActivas.length})
-					</h2>
-					<div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-						{alertasActivas.map(alerta => (
-							<div
-								key={alerta.id}
-								style={{
-									padding: '1rem',
-									border: '2px solid #fbbf24',
-									borderRadius: '8px',
-									background: '#fffbeb'
-								}}
-							>
-								<p style={{ margin: '0 0 0.3rem', fontWeight: 700, color: '#92400e', fontSize: '0.85rem' }}>
-									ID: {alerta.id}
-								</p>
-								<p style={{ margin: '0.2rem 0', color: '#21335b', fontSize: '0.9rem' }}>
-									<strong>Motivo:</strong> {alerta.motivo}
-								</p>
-								{alerta.nombreZona && (
-									<p style={{ margin: '0.2rem 0', color: '#4b5563', fontSize: '0.85rem' }}>
-										<strong>Zona:</strong> {alerta.nombreZona}
-									</p>
-								)}
-								{alerta.emailUsuario && (
-									<p style={{ margin: '0.2rem 0', color: '#4b5563', fontSize: '0.82rem' }}>
-										<strong>Usuario:</strong> {alerta.emailUsuario}
-									</p>
-								)}
-							</div>
-						))}
-					</div>
-				</div>
-			)}
-		</section>
-	);
+      {/* ─── SIDEBAR IZQUIERDO ─────────────────────────────────────────── */}
+      <aside className={`da-sidebar ${sidebarAbierto ? 'da-sidebar--open' : 'da-sidebar--collapsed'}`}>
+
+        <div className="da-sidebar__head">
+          {sidebarAbierto && <span className="da-sidebar__logo">🛡 Admin UTA</span>}
+          <button
+            className="da-sidebar__toggle"
+            onClick={() => setSidebarAbierto(v => !v)}
+            title={sidebarAbierto ? 'Colapsar menú' : 'Expandir menú'}
+          >
+            {sidebarAbierto ? '◀' : '▶'}
+          </button>
+        </div>
+
+        {alertasActivas.length > 0 && (
+          <div className={`da-sidebar__badge ${sidebarAbierto ? '' : 'da-sidebar__badge--mini'}`}>
+            {sidebarAbierto
+              ? `🔴 ${alertasActivas.length} alerta${alertasActivas.length !== 1 ? 's' : ''} activa${alertasActivas.length !== 1 ? 's' : ''}`
+              : `🔴 ${alertasActivas.length}`}
+          </div>
+        )}
+
+        <nav className="da-sidebar__nav">
+          {SECCIONES_MENU.map(s => (
+            <button
+              key={s.id}
+              className={`da-sidebar__item ${seccionActiva === s.id ? 'da-sidebar__item--active' : ''}`}
+              onClick={() => seleccionarSeccion(s.id)}
+              title={!sidebarAbierto ? s.label : undefined}
+            >
+              <span className="da-sidebar__icono">{s.icono}</span>
+              {sidebarAbierto && <span className="da-sidebar__label">{s.label}</span>}
+            </button>
+          ))}
+        </nav>
+
+        <div className="da-sidebar__footer">
+          <button className="da-sidebar__logout" onClick={logout} title="Cerrar sesión">
+            <span>🚪</span>
+            {sidebarAbierto && <span>Cerrar sesión</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* ─── CONTENIDO PRINCIPAL ───────────────────────────────────────── */}
+      <main className="da-main">
+
+        {/* MAPA – ocupa toda la parte superior */}
+        <section className="da-mapa-section">
+          <div className="da-mapa-header">
+            <div>
+              <h1 className="da-mapa-title">🗺 Campus UTA – Monitoreo en Tiempo Real</h1>
+              <p className="da-mapa-sub">Huachi, Ambato · 4 zonas monitoreadas</p>
+            </div>
+            {alertasActivas.length > 0 && (
+              <span className="da-alerta-badge">
+                🔴 {alertasActivas.length} activa{alertasActivas.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <div className="da-mapa-wrap">
+            <MapaCampus alertas={alertasActivas} zonasApi={zonasApi} height="100%" />
+          </div>
+        </section>
+
+        {/* PANEL INFERIOR – gestión + estadísticas */}
+        <section className="da-panel-section">
+          <div className="da-panel-tabs">
+            {SECCIONES_MENU.map(s => (
+              <button
+                key={s.id}
+                className={`da-panel-tab ${seccionActiva === s.id ? 'da-panel-tab--active' : ''}`}
+                onClick={() => setSeccionActiva(s.id)}
+              >
+                {s.icono} {s.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="da-panel-content">
+            {seccionActiva === 'estadisticas' && <EstadisticasPanel />}
+            {seccionActiva === 'usuarios'     && <GestionUsuarios />}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
 };
 
 export default DashboardAdmin;

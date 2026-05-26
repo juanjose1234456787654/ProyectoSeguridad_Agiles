@@ -503,3 +503,46 @@
   padding: 0.5rem 0;
   margin: 0;
 }
+
+/* ── Error con botón reintentar ──────────────────────────────────────────── */
+.cc-error-retry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.88rem;
+  color: #7a5c00;
+}
+
+/* ── Filtro local ────────────────────────────────────────────────────────── */
+.cc-filtro-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cc-filtro__input {
+  padding-right: 2.2rem !important;
+}
+
+.cc-filtro__clear {
+  position: absolute;
+  right: 0.7rem;
+  background: none;
+  border: none;
+  font-size: 1.15rem;
+  color: #8898b0;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.cc-filtro__clear:hover {
+  color: #c0392b;
+}

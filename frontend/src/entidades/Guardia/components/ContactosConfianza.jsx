@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuth } from '../../../contexts/AuthContext';
 import contactosService from '../services/contactosService';
 import '../styles/ContactosConfianza.css';
 
@@ -201,12 +202,17 @@ const ContactosConfianza = () => {
   const [alertaError, setAlertaError] = useState('');
 
   // Carga general
-  const [cargando, setCargando] = useState(true);
+  const [cargando, setCargando] = useState(false);
   const [errorGlobal, setErrorGlobal] = useState('');
+  // Filtro local sobre las listas ya cargadas
+  const [filtro, setFiltro] = useState('');
+
+  const { user } = useAuth();
 
   // ── Carga de datos ──────────────────────────────────────────────────────────
 
   const cargarDatos = useCallback(async () => {
+    if (!user?.token) return;
     setCargando(true);
     setErrorGlobal('');
     try {
@@ -216,12 +222,17 @@ const ContactosConfianza = () => {
       ]);
       setContactos(Array.isArray(cs) ? cs : []);
       setGrupos(Array.isArray(gs) ? gs : []);
-    } catch {
-      setErrorGlobal('No se pudieron cargar los datos. Intenta de nuevo.');
+    } catch (e) {
+      const status = e?.response?.status;
+      if (status === 401) {
+        setErrorGlobal('Sesión no válida. Vuelve a iniciar sesión.');
+      } else {
+        setErrorGlobal('No se pudieron cargar los datos.');
+      }
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [user?.token]);
 
   useEffect(() => { cargarDatos(); }, [cargarDatos]);
 
@@ -309,6 +320,27 @@ const ContactosConfianza = () => {
   const totalContactos = contactos.length + grupos.reduce((s, g) => s + (g.integrantes?.length || 0), 0);
   const correosExistentes = contactos.map((c) => c.correo || c.COR_PER_REF);
 
+  // ── Listas filtradas localmente ─────────────────────────────────────────────
+  const termino = filtro.toLowerCase().trim();
+
+  const contactosFiltrados = termino
+    ? contactos.filter((c) => {
+        const a = (c.alias || '').toLowerCase();
+        const e = (c.correo || c.COR_PER_REF || '').toLowerCase();
+        return a.includes(termino) || e.includes(termino);
+      })
+    : contactos;
+
+  const gruposFiltrados = termino
+    ? grupos.filter((g) => {
+        const n = (g.nombre || '').toLowerCase();
+        const ints = (g.integrantes || [])
+          .map((i) => (i.correo || i.COR_PER_REF || '').toLowerCase())
+          .join(' ');
+        return n.includes(termino) || ints.includes(termino);
+      })
+    : grupos;
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -377,8 +409,37 @@ const ContactosConfianza = () => {
         </button>
       </nav>
 
-      {errorGlobal && <p className="cc-error">{errorGlobal}</p>}
+      {errorGlobal && (
+        <div className="cc-error-retry">
+          <span>{errorGlobal}</span>
+          <button type="button" className="cc-btn cc-btn--secondary" onClick={cargarDatos}>
+            Reintentar
+          </button>
+        </div>
+      )}
       {cargando && <p className="cc-loading">Cargando…</p>}
+
+      {/* Filtro local de la lista ya cargada */}
+      {!cargando && !errorGlobal && (contactos.length > 0 || grupos.length > 0) && (
+        <div className="cc-filtro-wrap">
+          <input
+            type="text"
+            className="cc-input cc-filtro__input"
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            placeholder={
+              tab === 'contactos'
+                ? 'Filtrar contactos por nombre o correo…'
+                : 'Filtrar grupos por nombre o integrante…'
+            }
+          />
+          {filtro && (
+            <button type="button" className="cc-filtro__clear" onClick={() => setFiltro('')} aria-label="Limpiar filtro">
+              ×
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Panel: Contactos individuales ── */}
       {!cargando && tab === 'contactos' && (
@@ -435,23 +496,27 @@ const ContactosConfianza = () => {
 
           {/* Lista de contactos */}
           {contactos.length > 0 ? (
-            <ul className="cc-list">
-              {contactos.map((c) => (
-                <li key={c.id} className="cc-list__item">
-                  <div className="cc-list__info">
-                    <span className="cc-list__nombre">{c.alias || c.correo || c.COR_PER_REF}</span>
-                    {c.alias && <span className="cc-correo">{c.correo || c.COR_PER_REF}</span>}
-                  </div>
-                  <button
-                    type="button"
-                    className="cc-btn cc-btn--danger"
-                    onClick={() => eliminarContacto(c.id)}
-                  >
-                    Eliminar
-                  </button>
-                </li>
-              ))}
-            </ul>
+            contactosFiltrados.length > 0 ? (
+              <ul className="cc-list">
+                {contactosFiltrados.map((c) => (
+                  <li key={c.id} className="cc-list__item">
+                    <div className="cc-list__info">
+                      <span className="cc-list__nombre">{c.alias || c.correo || c.COR_PER_REF}</span>
+                      {c.alias && <span className="cc-correo">{c.correo || c.COR_PER_REF}</span>}
+                    </div>
+                    <button
+                      type="button"
+                      className="cc-btn cc-btn--danger"
+                      onClick={() => eliminarContacto(c.id)}
+                    >
+                      Eliminar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="cc-empty">Ningún contacto coincide con <strong>"{filtro}"</strong>.</p>
+            )
           ) : (
             <p className="cc-empty">Aún no tienes contactos individuales. Busca una persona arriba para agregar.</p>
           )}
@@ -480,35 +545,39 @@ const ContactosConfianza = () => {
           )}
 
           {grupos.length > 0 ? (
-            <ul className="cc-list cc-list--grupos">
-              {grupos.map((g) => (
-                <li key={g.id} className="cc-list__item cc-list__item--grupo">
-                  <div className="cc-list__info">
-                    <span className="cc-list__nombre">{g.nombre}</span>
-                    <span className="cc-correo">
-                      {(g.integrantes || []).length} integrante{(g.integrantes || []).length !== 1 ? 's' : ''}
-                    </span>
-                    {(g.integrantes || []).length > 0 && (
-                      <div className="cc-chips cc-chips--sm">
-                        {(g.integrantes || []).map((i) => (
-                          <span key={i.correo || i.COR_PER_REF} className="cc-chip cc-chip--readonly">
-                            {i.correo || i.COR_PER_REF}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="cc-list__actions">
-                    <button type="button" className="cc-btn cc-btn--secondary" onClick={() => editarGrupo(g)}>
-                      Editar
-                    </button>
-                    <button type="button" className="cc-btn cc-btn--danger" onClick={() => eliminarGrupo(g.id, g.nombre)}>
-                      Eliminar
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            gruposFiltrados.length > 0 ? (
+              <ul className="cc-list cc-list--grupos">
+                {gruposFiltrados.map((g) => (
+                  <li key={g.id} className="cc-list__item cc-list__item--grupo">
+                    <div className="cc-list__info">
+                      <span className="cc-list__nombre">{g.nombre}</span>
+                      <span className="cc-correo">
+                        {(g.integrantes || []).length} integrante{(g.integrantes || []).length !== 1 ? 's' : ''}
+                      </span>
+                      {(g.integrantes || []).length > 0 && (
+                        <div className="cc-chips cc-chips--sm">
+                          {(g.integrantes || []).map((i) => (
+                            <span key={i.correo || i.COR_PER_REF} className="cc-chip cc-chip--readonly">
+                              {i.correo || i.COR_PER_REF}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="cc-list__actions">
+                      <button type="button" className="cc-btn cc-btn--secondary" onClick={() => editarGrupo(g)}>
+                        Editar
+                      </button>
+                      <button type="button" className="cc-btn cc-btn--danger" onClick={() => eliminarGrupo(g.id, g.nombre)}>
+                        Eliminar
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="cc-empty">Ningún grupo coincide con <strong>"{filtro}"</strong>.</p>
+            )
           ) : (
             !mostrarFormGrupo && <p className="cc-empty">No tienes grupos de confianza. Crea uno arriba.</p>
           )}

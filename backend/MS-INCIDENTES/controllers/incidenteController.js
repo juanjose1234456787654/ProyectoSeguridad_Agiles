@@ -23,6 +23,17 @@ const registrarHistorialCierre = async ({ idIncidente, acciones }) => {
   }
 };
 
+// GET /api/incidentes/estadisticas – solo Administrador (T5.1 / T5.2)
+const getEstadisticas = async (req, res) => {
+  try {
+    const datos = await Incidente.getEstadisticas();
+    res.json(datos);
+  } catch (error) {
+    console.error('[estadisticas]', error);
+    res.status(500).json({ message: 'Error al obtener estadísticas' });
+  }
+};
+
 // GET /api/incidentes
 const getAll = async (req, res) => {
   try {
@@ -107,8 +118,18 @@ const create = async (req, res) => {
     const nuevo = await Incidente.create({ motivo, estado, idZona, idUsuario });
     
     console.log(`[create] Incidente creado: ${nuevo.id} para usuario: "${nuevo.idUsuario}"`);
-    
-    emitRealtime(req, 'incidente:creado', nuevo);
+
+    // Enriquecer el evento WebSocket con info del usuario (nombre, email, zona)
+    // para que los receptores puedan mostrar "De: [nombre] | Motivo: [motivo]"
+    let payloadWS = { ...nuevo };
+    try {
+      const enriquecido = await Incidente.findById(nuevo.id);
+      if (enriquecido) payloadWS = enriquecido;
+    } catch (e) {
+      console.warn('[create] No se pudo enriquecer payload WS:', e.message);
+    }
+
+    emitRealtime(req, 'incidente:creado', payloadWS);
     res.status(201).json(nuevo);
   } catch (error) {
     console.error(`[create] Error:`, error);
@@ -185,4 +206,4 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getActivos, getByUsuario, getById, create, update, close, remove };
+module.exports = { getAll, getActivos, getByUsuario, getById, create, update, close, remove, getEstadisticas };

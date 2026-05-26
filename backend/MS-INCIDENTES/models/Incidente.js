@@ -260,6 +260,64 @@ const Incidente = {
       [acciones, id]
     );
     return Incidente.findById(id);
+  },
+
+  // Estadísticas para Administrador (T5.1 / T5.2)
+  getEstadisticas: async () => {
+    // Totales generales
+    const [totalesRows] = await db.query(
+      `SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN EST_INC = 'Cerrado' THEN 1 ELSE 0 END) AS cerradas,
+        SUM(CASE WHEN EST_INC = 'Activo'  THEN 1 ELSE 0 END) AS activas
+       FROM INCIDENTES`
+    );
+
+    // Agrupado por motivo (todos los incidentes)
+    const [porMotivoRows] = await db.query(
+      `SELECT MOT_INC AS motivo, COUNT(*) AS cantidad
+       FROM INCIDENTES
+       GROUP BY MOT_INC
+       ORDER BY cantidad DESC`
+    );
+
+    // Agrupado por zona (todos los incidentes)
+    const [porZonaRows] = await db.query(
+      `SELECT
+        COALESCE(z.NOM_ZON, 'Sin zona') AS zona,
+        COUNT(*) AS cantidad
+       FROM INCIDENTES i
+       LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+       GROUP BY z.NOM_ZON
+       ORDER BY cantidad DESC`
+    );
+
+    // Últimas 10 alertas cerradas con detalle
+    const [cerradasRows] = await db.query(
+      `SELECT TOP 10
+        i.ID_INC         AS id,
+        i.MOT_INC        AS motivo,
+        i.ACCIONES_INC   AS acciones,
+        i.ID_ZON_PER     AS idZona,
+        COALESCE(z.NOM_ZON, 'Sin zona') AS nombreZona,
+        u.COR_INS_REF_USU AS emailUsuario
+       FROM INCIDENTES i
+       LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+       LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+       WHERE i.EST_INC = 'Cerrado'
+       ORDER BY i.ID_INC DESC`
+    );
+
+    const { total, cerradas, activas } = totalesRows[0] || { total: 0, cerradas: 0, activas: 0 };
+
+    return {
+      total: Number(total) || 0,
+      cerradas: Number(cerradas) || 0,
+      activas: Number(activas) || 0,
+      porMotivo: porMotivoRows.map(r => ({ motivo: r.motivo, cantidad: Number(r.cantidad) })),
+      porZona: porZonaRows.map(r => ({ zona: r.zona, cantidad: Number(r.cantidad) })),
+      ultimasCerradas: cerradasRows
+    };
   }
 };
 

@@ -1,5 +1,5 @@
 const express = require('express');
-const { getAll, getActivos, getByUsuario, getById, create, update, close, remove } = require('../controllers/incidenteController');
+const { getAll, getActivos, getByUsuario, getById, create, update, close, remove, getEstadisticas } = require('../controllers/incidenteController');
 const { protect } = require('../middlewares/authMiddleware');
 const { authorize } = require('../middlewares/roleMiddleware');
 
@@ -13,6 +13,9 @@ router.get('/', getAll);
 
 // GET  /api/incidentes/activos → todos los roles autenticados
 router.get('/activos', getActivos);
+
+// GET  /api/incidentes/estadisticas → solo Administrador (T5.1/T5.2)
+router.get('/estadisticas', authorize('Administrador'), getEstadisticas);
 
 // GET  /api/incidentes/usuario/me → mis alertas activas según token
 router.get('/usuario/me', getByUsuario);

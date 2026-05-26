@@ -1,0 +1,199 @@
+/* ── Root ────────────────────────────────────────────────────────────────── */
+.ep-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ── KPIs ────────────────────────────────────────────────────────────────── */
+.ep-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.ep-kpi {
+  border-radius: 12px;
+  padding: 1.1rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  box-shadow: 0 2px 8px rgba(33,51,91,0.08);
+}
+
+.ep-kpi--total   { background: #21335b; color: #fff; }
+.ep-kpi--activas { background: #c53030; color: #fff; }
+.ep-kpi--cerradas{ background: #276749; color: #fff; }
+
+.ep-kpi__num {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ep-kpi__label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  opacity: 0.85;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Tarjetas ────────────────────────────────────────────────────────────── */
+.ep-graficos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.ep-card {
+  background: #fff;
+  border: 1px solid #d8deea;
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+  box-shadow: 0 2px 8px rgba(33,51,91,0.06);
+}
+
+.ep-card--full {
+  grid-column: 1 / -1;
+}
+
+.ep-card__title {
+  margin: 0 0 0.2rem;
+  color: #21335b;
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.ep-card__hint {
+  margin: 0 0 0.75rem;
+  color: #9ca3af;
+  font-size: 0.76rem;
+}
+
+/* ── Tooltip personalizado ───────────────────────────────────────────────── */
+.ep-tooltip {
+  background: #21335b;
+  color: #fff;
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* ── Tabla ───────────────────────────────────────────────────────────────── */
+.ep-tabla-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ep-filtro-activo {
+  background: #ebf4ff;
+  color: #2b6cb0;
+  border-radius: 20px;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.ep-btn-limpiar {
+  background: none;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  color: #4a5568;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ep-btn-limpiar:hover { background: #f7fafc; }
+
+.ep-tabla-wrap {
+  overflow-x: auto;
+}
+
+.ep-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.ep-tabla th {
+  background: #f4f6fa;
+  color: #21335b;
+  font-weight: 700;
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+  border-bottom: 2px solid #d8deea;
+  white-space: nowrap;
+}
+
+.ep-tabla td {
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid #edf2f7;
+  color: #374151;
+  vertical-align: top;
+}
+
+.ep-tabla tbody tr:hover { background: #f9fafb; }
+
+.ep-td-id {
+  font-weight: 700;
+  color: #21335b;
+  white-space: nowrap;
+}
+
+.ep-td-acciones {
+  max-width: 260px;
+  color: #6b7280;
+  font-size: 0.82rem;
+}
+
+.ep-badge {
+  background: #ebf4ff;
+  color: #2b6cb0;
+  border-radius: 20px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ep-empty {
+  color: #9ca3af;
+  font-size: 0.88rem;
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.ep-loading, .ep-error {
+  padding: 2rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.ep-error { color: #c53030; }
+.ep-error button {
+  margin-left: 0.75rem;
+  background: none;
+  border: 1px solid #c53030;
+  border-radius: 6px;
+  color: #c53030;
+  padding: 0.2rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
