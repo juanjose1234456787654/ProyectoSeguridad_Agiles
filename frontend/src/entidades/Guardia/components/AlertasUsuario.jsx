@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import alertaService from '../services/alertaService';
-import mapImage from '../assets/map.png';
+import MapaCampus from './MapaCampus';
 import '../styles/AlertasUsuario.css';
 
 const ROLES_PERMITIDOS = ['Guardia', 'Estudiante', 'Docente', 'Personal'];
@@ -14,6 +14,8 @@ const AlertasUsuario = () => {
 	const [estado, setEstado] = useState('Inactivo');
 	const [ultimaAlerta, setUltimaAlerta] = useState(null);
 	const [misAlertas, setMisAlertas] = useState([]);
+	const [alertasParaMapa, setAlertasParaMapa] = useState([]);
+	const [zonasApi, setZonasApi] = useState([]);
 
 	const [enviando, setEnviando] = useState(false);
 	const [error, setError] = useState('');
@@ -53,7 +55,6 @@ const AlertasUsuario = () => {
 		const cargarDatos = async () => {
 			try {
 				setError('');
-				// Cargar mis alertas activas
 				await cargarMisAlertas();
 			} catch (e) {
 				setError(e?.response?.data?.message || 'No se pudo cargar alertas');
@@ -62,13 +63,37 @@ const AlertasUsuario = () => {
 
 		cargarDatos();
 
-		// Recargar alertas cada 10 segundos como fallback
 		const intervalId = setInterval(() => {
 			cargarMisAlertas();
 		}, 10000);
 
 		return () => clearInterval(intervalId);
 	}, [user?.rol, user?.id]);
+
+	// Cargar zonas y alertas del mapa solo para Guardia de Seguridad
+	useEffect(() => {
+		if (!user?.token || user?.rol !== 'Guardia') return;
+		alertaService.getZonas()
+			.then(data => setZonasApi(Array.isArray(data) ? data : []))
+			.catch(() => {});
+	}, [user?.token, user?.rol]);
+
+	const cargarAlertasMapa = async () => {
+		if (user?.rol !== 'Guardia') return;
+		try {
+			const { default: guardiaService } = await import('../services/guardiaService');
+			const data = await guardiaService.getIncidentesActivos();
+			setAlertasParaMapa(Array.isArray(data) ? data : []);
+		} catch {
+			// El mapa sigue visible aunque falle la carga de alertas
+		}
+	};
+
+	useEffect(() => {
+		if (!user?.token || !user?.id || user?.rol !== 'Guardia') return;
+		cargarAlertasMapa();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [user?.token, user?.id, user?.rol]);
 
 	useEffect(() => {
 		if (!user?.token || !user?.id) return undefined;
@@ -81,7 +106,6 @@ const AlertasUsuario = () => {
 				if (esMiAlerta) {
 					setUltimaAlerta(payload);
 					setEstado('Activo');
-					// Agregar nueva alerta a la lista solo si no existe
 					setMisAlertas((prev) => {
 						const soloMias = filtrarAlertasDelUsuario(prev);
 						const existe = soloMias.some(a => a.id === payload.id);
@@ -93,11 +117,19 @@ const AlertasUsuario = () => {
 				if (user.rol === 'Guardia' && !esMiAlerta) {
 					setNotice('Nueva alerta detectada en el sistema.');
 				}
+
+				// Actualizar mapa con nueva alerta
+				if (user.rol === 'Guardia') {
+					setAlertasParaMapa(prev => {
+						const existe = prev.some(a => a.id === payload.id);
+						return existe ? prev : [...prev, payload];
+					});
+				}
 			},
 			onIncidenteCerrado: (payload) => {
 				if (!payload) return;
-				// Remover alerta cerrada de la lista
 				setMisAlertas((prev) => prev.filter(a => a.id !== payload.id));
+				setAlertasParaMapa((prev) => prev.filter(a => a.id !== payload.id));
 				setNotice(`Alerta ${payload.id} ha sido cerrada por un guardia.`);
 			}
 		});
@@ -190,9 +222,12 @@ const AlertasUsuario = () => {
 
 	return (
 		<div className="alertas-shell">
-			{user.rol === 'Guardia' && (
-				<section className="guardia-head-card" aria-label="Imagen de cabecera de guardia">
-					<img src={mapImage} alt="Mapa de referencia para guardia" className="guardia-head-image" />
+			{/* MAPA INTERACTIVO DEL CAMPUS UTA – solo visible para Guardia de Seguridad */}
+			{user?.rol === 'Guardia' && (
+				<section className="guardia-head-card" aria-label="Mapa interactivo del campus UTA">
+					<div style={{ minHeight: '320px', height: '360px' }}>
+						<MapaCampus alertas={alertasParaMapa} zonasApi={zonasApi} height="100%" />
+					</div>
 				</section>
 			)}
 
@@ -225,8 +260,12 @@ const AlertasUsuario = () => {
 
 					<label>
 						Zona
-							<select value="" disabled>
-							<option value="">Próximamente (Mapa interactivo)</option>
+						<select
+							value={motivo}
+							onChange={() => {}}
+							disabled
+						>
+							<option value="">Campus UTA – Ver mapa arriba</option>
 						</select>
 					</label>
 				</div>
@@ -267,7 +306,7 @@ const AlertasUsuario = () => {
 
 				<footer className="status-row">
 					<p><strong>Estado:</strong> {estado}</p>
-					<p><strong>Ubicación:</strong> Campus Central (Próximamente: Mapa interactivo)</p>
+					<p><strong>Ubicación:</strong> Campus UTA – Huachi, Ambato</p>
 				</footer>
 			</section>
 

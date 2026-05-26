@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import guardiaService from '../services/guardiaService';
 import AlertasUsuario from './AlertasUsuario';
+import ContactosConfianza from './ContactosConfianza';
 
 const DashboardGuardia = () => {
 	const { user, logout } = useAuth();
@@ -306,6 +307,7 @@ const DashboardGuardia = () => {
 				{/* ALERTAS USUARIO COMPONENT */}
 				<div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
 					<AlertasUsuario />
+					<ContactosConfianza />
 				</div>
 			</main>
 		</div>
