@@ -4,8 +4,8 @@ import ContactosConfianza from '../../Guardia/components/ContactosConfianza';
 import '../styles/DashboardPersonal.css';
 
 const MENU_OPCIONES = [
-  { id: 'alertas',   icono: '🔔', label: 'Alertas Activas' },
-  { id: 'contactos', icono: '👥', label: 'Contactos de Confianza' }
+  { id: 'alertas', label: 'Alertas Activas' },
+  { id: 'contactos', label: 'Contactos de Confianza' }
 ];
 
 const DashboardPersonal = () => {
@@ -39,7 +39,7 @@ const DashboardPersonal = () => {
               gap: '0.4rem'
             }}
           >
-            ☰ Menú {menuAbierto ? '▲' : '▼'}
+            Menu {menuAbierto ? '▲' : '▼'}
           </button>
           {menuAbierto && (
             <div style={{
@@ -74,7 +74,7 @@ const DashboardPersonal = () => {
                     borderBottom: '1px solid #f1f5f9'
                   }}
                 >
-                  {op.icono} {op.label}
+                  {op.label}
                 </button>
               ))}
             </div>

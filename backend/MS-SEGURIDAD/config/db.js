@@ -51,7 +51,7 @@ const buildQuery = (sql, params) => {
 const runSqlServerQuery = async (database, sql, params = []) => {
   const instance = process.env.DB_SQL_INSTANCE || 'localhost\\SQLEXPRESS';
   const query = buildQuery(sql, params).trim();
-  const isSelect = /^select\b/i.test(query);
+  const isSelect = /^(select|with)\b/i.test(query);
 
   const wrappedQuery = isSelect
     ? `SET NOCOUNT ON; ${query} FOR JSON PATH, INCLUDE_NULL_VALUES;`

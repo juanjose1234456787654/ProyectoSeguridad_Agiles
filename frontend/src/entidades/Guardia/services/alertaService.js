@@ -14,10 +14,10 @@ const getZonas = async () => {
 	return response.data;
 };
 
-const crearAlerta = async ({ motivo, idZona, idUsuario }) => {
+const crearAlerta = async ({ motivo, idZona, lat, lng, idUsuario }) => {
 	const response = await axios.post(
 		`${API_BASE}/incidentes`,
-		{ motivo, idZona, idUsuario },
+		{ motivo, idZona, lat, lng, idUsuario },
 		getAuthHeaders()
 	);
 	return response.data;

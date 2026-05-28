@@ -20,8 +20,20 @@ const getAlertasActivasGuardia = async (idUsuario) => {
 };
 
 const getIncidentesActivos = async () => {
-	const response = await axios.get(`${API_BASE}/incidentes/activos`, getAuthHeaders());
-	return response.data;
+	try {
+		const response = await axios.get(`${API_BASE}/incidentes/activos`, getAuthHeaders());
+		return response.data;
+	} catch (error) {
+		const status = error?.response?.status;
+		const message = String(error?.response?.data?.message || '').toLowerCase();
+		const sinAlertas = message.includes('no hay alerta');
+
+		if (status === 404 || (status === 400 && sinAlertas) || (status === 500 && sinAlertas)) {
+			return [];
+		}
+
+		throw error;
+	}
 };
 
 const getIncidenteDetalle = async (idIncidente) => {

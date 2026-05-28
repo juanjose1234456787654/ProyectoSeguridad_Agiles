@@ -17,7 +17,20 @@ const EstadoGuardia = {
   findAll: async () => {
     try {
       const [rows] = await db.query(
-        `SELECT
+        `WITH ultimos AS (
+          SELECT
+            e.ID_EST,
+            e.EST_EST,
+            e.HOR_SER_EST,
+            e.ID_USU_REF,
+            ROW_NUMBER() OVER (
+              PARTITION BY e.ID_USU_REF
+              ORDER BY TRY_CAST(SUBSTRING(e.ID_EST, 4, LEN(e.ID_EST) - 3) AS INT) DESC, e.ID_EST DESC
+            ) AS rn
+          FROM ESTADO_GUARDIAS e
+          WHERE UPPER(LTRIM(RTRIM(e.ID_USU_REF))) NOT IN ('U1', 'U2')
+        )
+        SELECT
           e.ID_EST      AS id,
           e.EST_EST     AS estado,
           e.HOR_SER_EST AS horario,
@@ -30,20 +43,37 @@ const EstadoGuardia = {
             COALESCE(p.APE2_PER, '')
           ))) AS nombre,
           (SELECT COUNT(*) FROM ASIGNACION_ALERTAS a WHERE a.ID_EST_PER = e.ID_EST) AS casosAsignados
-        FROM ESTADO_GUARDIAS e
+        FROM ultimos e
         LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = e.ID_USU_REF
         LEFT JOIN [BD_UTA].dbo.PERSONAS_UTA p ON p.COR_PER = u.COR_INS_REF_USU
+        WHERE e.rn = 1
+          AND UPPER(LTRIM(RTRIM(COALESCE(u.COR_INS_REF_USU, '')))) NOT LIKE '%PRUEBA FILTRO U1%'
+          AND UPPER(LTRIM(RTRIM(COALESCE(u.COR_INS_REF_USU, '')))) NOT LIKE '%PRUEBA FILTRO U2%'
         ORDER BY e.EST_EST, e.ID_EST`
       );
       return rows;
     } catch {
       const [rows] = await db.query(
-        `SELECT
+        `WITH ultimos AS (
+          SELECT
+            ID_EST,
+            EST_EST,
+            HOR_SER_EST,
+            ID_USU_REF,
+            ROW_NUMBER() OVER (
+              PARTITION BY ID_USU_REF
+              ORDER BY TRY_CAST(SUBSTRING(ID_EST, 4, LEN(ID_EST) - 3) AS INT) DESC, ID_EST DESC
+            ) AS rn
+          FROM ESTADO_GUARDIAS
+          WHERE UPPER(LTRIM(RTRIM(ID_USU_REF))) NOT IN ('U1', 'U2')
+        )
+        SELECT
           ID_EST      AS id,
           EST_EST     AS estado,
           HOR_SER_EST AS horario,
           ID_USU_REF  AS idUsuario
-        FROM ESTADO_GUARDIAS
+        FROM ultimos
+        WHERE rn = 1
         ORDER BY ID_EST`
       );
       return rows;
@@ -74,7 +104,8 @@ const EstadoGuardia = {
         HOR_SER_EST AS horario,
         ID_USU_REF  AS idUsuario
       FROM ESTADO_GUARDIAS
-      WHERE ID_USU_REF = ?`,
+      WHERE ID_USU_REF = ?
+      ORDER BY TRY_CAST(SUBSTRING(ID_EST, 4, LEN(ID_EST) - 3) AS INT) DESC, ID_EST DESC`,
       [idUsuario]
     );
     return rows;

@@ -262,7 +262,6 @@ const ContactosConfianza = () => {
   };
 
   const eliminarContacto = async (id) => {
-    if (!window.confirm('¿Eliminar este contacto de confianza?')) return;
     try {
       await contactosService.removeContacto(id);
       await cargarDatos();
@@ -285,7 +284,6 @@ const ContactosConfianza = () => {
   };
 
   const eliminarGrupo = async (id, nombre) => {
-    if (!window.confirm(`¿Eliminar el grupo "${nombre}"?`)) return;
     try {
       await contactosService.deleteGrupo(id);
       await cargarDatos();
@@ -338,7 +336,7 @@ const ContactosConfianza = () => {
 
       {alertaResultado && (
         <div className="cc-alerta-resultado cc-alerta-resultado--ok">
-          <strong>✓ Alerta enviada.</strong> {alertaResultado.enviados} notificacion{alertaResultado.enviados !== 1 ? 'es' : ''} entregada{alertaResultado.enviados !== 1 ? 's' : ''}.
+          <strong>Alerta enviada.</strong> {alertaResultado.enviados} notificacion{alertaResultado.enviados !== 1 ? 'es' : ''} entregada{alertaResultado.enviados !== 1 ? 's' : ''}.
           {alertaResultado.fallidos > 0 && ` (${alertaResultado.fallidos} fallida${alertaResultado.fallidos !== 1 ? 's' : ''})`}
         </div>
       )}

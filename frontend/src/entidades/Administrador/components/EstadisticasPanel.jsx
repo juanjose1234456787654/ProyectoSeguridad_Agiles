@@ -65,6 +65,15 @@ const EstadisticasPanel = () => {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Auto-refresh para mantener KPIs y gráficos al día sin recargar la página.
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      cargar();
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, [cargar]);
+
   if (cargando) return <div className="ep-loading">Cargando estadísticas…</div>;
   if (error)    return <div className="ep-error">{error} <button onClick={cargar}>Reintentar</button></div>;
   if (!datos)   return null;

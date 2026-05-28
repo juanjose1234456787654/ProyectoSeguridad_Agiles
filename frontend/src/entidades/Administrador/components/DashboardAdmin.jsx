@@ -10,9 +10,9 @@ import GuardiasEstado from './GuardiasEstado';
 import '../styles/DashboardAdmin.css';
 
 const SECCIONES_MENU = [
-  { id: 'usuarios',  icono: '👥', label: 'Gestión de Usuarios' },
-  { id: 'guardias',  icono: '🛡️', label: 'Guardias En Servicio' },
-  { id: 'estadisticas', icono: '📊', label: 'Estadísticas' }
+  { id: 'usuarios', label: 'Gestión de Usuarios' },
+  { id: 'guardias', label: 'Guardias En Servicio' },
+  { id: 'estadisticas', label: 'Estadísticas' }
 ];
 
 const DashboardAdmin = () => {
@@ -90,7 +90,7 @@ const DashboardAdmin = () => {
       <aside className={`da-sidebar ${sidebarAbierto ? 'da-sidebar--open' : 'da-sidebar--collapsed'}`}>
 
         <div className="da-sidebar__head">
-          {sidebarAbierto && <span className="da-sidebar__logo">🛡 Admin UTA</span>}
+          {sidebarAbierto && <span className="da-sidebar__logo">Admin UTA</span>}
           <button
             className="da-sidebar__toggle"
             onClick={() => setSidebarAbierto(v => !v)}
@@ -103,8 +103,8 @@ const DashboardAdmin = () => {
         {alertasActivas.length > 0 && (
           <div className={`da-sidebar__badge ${sidebarAbierto ? '' : 'da-sidebar__badge--mini'}`}>
             {sidebarAbierto
-              ? `🔴 ${alertasActivas.length} alerta${alertasActivas.length !== 1 ? 's' : ''} activa${alertasActivas.length !== 1 ? 's' : ''}`
-              : `🔴 ${alertasActivas.length}`}
+              ? `${alertasActivas.length} alerta${alertasActivas.length !== 1 ? 's' : ''} activa${alertasActivas.length !== 1 ? 's' : ''}`
+              : `${alertasActivas.length}`}
           </div>
         )}
 
@@ -116,7 +116,7 @@ const DashboardAdmin = () => {
               onClick={() => seleccionarSeccion(s.id)}
               title={!sidebarAbierto ? s.label : undefined}
             >
-              <span className="da-sidebar__icono">{s.icono}</span>
+              {s.icono && <span className="da-sidebar__icono">{s.icono}</span>}
               {sidebarAbierto && <span className="da-sidebar__label">{s.label}</span>}
             </button>
           ))}
@@ -124,7 +124,6 @@ const DashboardAdmin = () => {
 
         <div className="da-sidebar__footer">
           <button className="da-sidebar__logout" onClick={logout} title="Cerrar sesión">
-            <span>🚪</span>
             {sidebarAbierto && <span>Cerrar sesión</span>}
           </button>
         </div>
@@ -137,12 +136,12 @@ const DashboardAdmin = () => {
         <section className="da-mapa-section">
           <div className="da-mapa-header">
             <div>
-              <h1 className="da-mapa-title">🗺 Campus UTA – Monitoreo en Tiempo Real</h1>
+              <h1 className="da-mapa-title">Campus UTA - Monitoreo en Tiempo Real</h1>
               <p className="da-mapa-sub">Huachi, Ambato · 4 zonas monitoreadas</p>
             </div>
             {alertasActivas.length > 0 && (
               <span className="da-alerta-badge">
-                🔴 {alertasActivas.length} activa{alertasActivas.length !== 1 ? 's' : ''}
+                {alertasActivas.length} activa{alertasActivas.length !== 1 ? 's' : ''}
               </span>
             )}
           </div>
@@ -160,7 +159,7 @@ const DashboardAdmin = () => {
                 className={`da-panel-tab ${seccionActiva === s.id ? 'da-panel-tab--active' : ''}`}
                 onClick={() => setSeccionActiva(s.id)}
               >
-                {s.icono} {s.label}
+                {s.label}
               </button>
             ))}
           </div>

@@ -5,6 +5,7 @@ import contactosService from '../services/contactosService';
 import notificacionesService from '../services/notificacionesService';
 import { NotificacionesContainer } from './NotificacionToast';
 import MapaCampus from './MapaCampus';
+import { ZONAS_CAMPUS } from './MapaCampus';
 import '../styles/AlertasUsuario.css';
 import '../styles/NotificacionToast.css';
 
@@ -48,12 +49,13 @@ const AlertasUsuario = () => {
 	};
 
 	const agregarToast = (payload) => {
+		const nombreZona = normalizarNombreZona(payload.idZona, payload.nombreZona || '');
 		const toast = {
 			id: payload.id || `${Date.now()}`,
 			nombreEmisor: payload.nombreUsuario || '',
 			emailEmisor: payload.emailUsuario || payload.idUsuario || '',
 			motivo: payload.motivo,
-			nombreZona: payload.nombreZona || '',
+			nombreZona,
 			timestamp: payload.timestamp || new Date().toISOString()
 		};
 		setToasts((prev) => [...prev.slice(-3), toast]); // máx 4 toasts simultáneos
@@ -74,6 +76,22 @@ const AlertasUsuario = () => {
 	const holdTriggeredRef = useRef(false);
 
 	const normalizarId = (value) => String(value || '').trim().toUpperCase();
+
+	const normalizarNombreZona = (idZona, nombreZonaRaw = '') => {
+		const idxDesdeId = Math.max(0, (Number(idZona) || 1) - 1);
+		if (Number.isFinite(Number(idZona)) && Number(idZona) > 0 && idxDesdeId < ZONAS_CAMPUS.length) {
+			return `Zona${idxDesdeId + 1}`;
+		}
+		const idxApi = zonasApi.findIndex(z => String(z.id) === String(idZona));
+		if (idxApi >= 0 && idxApi < ZONAS_CAMPUS.length) {
+			return `Zona${idxApi + 1}`;
+		}
+		const nom = String(nombreZonaRaw || '').trim();
+		if (/^zona\s*\d+$/i.test(nom)) {
+			return nom.replace(/\s+/g, '');
+		}
+		return nom;
+	};
 
 	const filtrarAlertasDelUsuario = (alertas = []) => {
 		if (!Array.isArray(alertas) || !user?.id) return [];
@@ -117,20 +135,58 @@ const AlertasUsuario = () => {
 		return () => clearInterval(intervalId);
 	}, [user?.rol, user?.id]);
 
-	// Cargar zonas y alertas del mapa solo para Guardia de Seguridad
+	// Cargar catálogo de zonas para mapear idZona al crear alertas.
 	useEffect(() => {
-		if (!user?.token || user?.rol !== 'Guardia') return;
+		if (!user?.token) return;
 		alertaService.getZonas()
 			.then(data => setZonasApi(Array.isArray(data) ? data : []))
 			.catch(() => {});
-	}, [user?.token, user?.rol]);
+	}, [user?.token]);
+
+	const pointInPolygon = (point, polygon) => {
+		let inside = false;
+		for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+			const xi = polygon[i].lng;
+			const yi = polygon[i].lat;
+			const xj = polygon[j].lng;
+			const yj = polygon[j].lat;
+			const intersects = ((yi > point.lat) !== (yj > point.lat))
+				&& (point.lng < ((xj - xi) * (point.lat - yi)) / ((yj - yi) || 1e-12) + xi);
+			if (intersects) inside = !inside;
+		}
+		return inside;
+	};
+
+	const resolverIdZona = (position) => {
+		if (!position) return zonasApi[0]?.id;
+		const zonaDetectada = ZONAS_CAMPUS.find(z => pointInPolygon(position, z.paths));
+		if (!zonaDetectada) return zonasApi[0]?.id;
+		const idx = ZONAS_CAMPUS.findIndex(z => z.id === zonaDetectada.id);
+		return zonasApi[idx]?.id || zonasApi[0]?.id;
+	};
+
+	const getCurrentPosition = () => new Promise((resolve) => {
+		if (!navigator.geolocation) {
+			resolve(null);
+			return;
+		}
+		navigator.geolocation.getCurrentPosition(
+			(pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+			() => resolve(null),
+			{ enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+		);
+	});
 
 	const cargarAlertasMapa = async () => {
 		if (user?.rol !== 'Guardia') return;
 		try {
 			const { default: guardiaService } = await import('../services/guardiaService');
 			const data = await guardiaService.getIncidentesActivos();
-			setAlertasParaMapa(Array.isArray(data) ? data : []);
+			const lista = Array.isArray(data) ? data.map((a) => ({
+				...a,
+				nombreZona: normalizarNombreZona(a?.idZona, a?.nombreZona || '')
+			})) : [];
+			setAlertasParaMapa(lista);
 		} catch {
 			// El mapa sigue visible aunque falle la carga de alertas
 		}
@@ -148,15 +204,19 @@ const AlertasUsuario = () => {
 		const socket = alertaService.connectAlertasSocket({
 			onIncidenteCreado: (payload) => {
 				if (!payload) return;
+				const payloadNormalizado = {
+					...payload,
+					nombreZona: normalizarNombreZona(payload.idZona, payload.nombreZona || '')
+				};
 
 				const esMiAlerta = normalizarId(payload.idUsuario) === normalizarId(user.id);
 				if (esMiAlerta) {
-					setUltimaAlerta(payload);
+					setUltimaAlerta(payloadNormalizado);
 					setEstado('Activo');
 					setMisAlertas((prev) => {
 						const soloMias = filtrarAlertasDelUsuario(prev);
 						const existe = soloMias.some(a => a.id === payload.id);
-						return existe ? soloMias : [...soloMias, payload];
+						return existe ? soloMias : [...soloMias, payloadNormalizado];
 					});
 					setNotice('Alerta emitida correctamente.');
 
@@ -172,12 +232,12 @@ const AlertasUsuario = () => {
 					// Toast visual + sonido + notificación del SO (HU-4: T3.2, T3.3)
 					// Solo si el usuario tiene las notificaciones habilitadas
 					if (notifHabilitadasRef.current) {
-						agregarToast(payload);
+						agregarToast(payloadNormalizado);
 						notificacionesService.notificar({
-							nombreEmisor: payload.nombreUsuario || '',
-							emailEmisor: payload.emailUsuario || payload.idUsuario || '',
-							motivo: payload.motivo,
-							nombreZona: payload.nombreZona || ''
+							nombreEmisor: payloadNormalizado.nombreUsuario || '',
+							emailEmisor: payloadNormalizado.emailUsuario || payloadNormalizado.idUsuario || '',
+							motivo: payloadNormalizado.motivo,
+							nombreZona: payloadNormalizado.nombreZona || ''
 						});
 					}
 				}
@@ -186,7 +246,7 @@ const AlertasUsuario = () => {
 				if (user.rol === 'Guardia') {
 					setAlertasParaMapa(prev => {
 						const existe = prev.some(a => a.id === payload.id);
-						return existe ? prev : [...prev, payload];
+						return existe ? prev : [...prev, payloadNormalizado];
 					});
 				}
 			},
@@ -212,8 +272,14 @@ const AlertasUsuario = () => {
 			setError('');
 			setNotice('');
 
+			const position = await getCurrentPosition();
+			const idZona = resolverIdZona(position);
+
 			const nueva = await alertaService.crearAlerta({
 				motivo: motivo.trim(),
+				idZona,
+				lat: position?.lat,
+				lng: position?.lng,
 				idUsuario: user.id
 			});
 
@@ -275,6 +341,25 @@ const AlertasUsuario = () => {
 
 	useEffect(() => {
 		return () => clearHoldInterval();
+	}, []);
+
+	/* Desbloquear AudioContext en el primer gesto del usuario (política autoplay del navegador).
+	   Sin esto, el sonido es bloqueado si el usuario nunca toca el botón de notificaciones. */
+	useEffect(() => {
+		const unlock = () => {
+			notificacionesService.preinicializarAudio();
+			document.removeEventListener('click', unlock);
+			document.removeEventListener('keydown', unlock);
+			document.removeEventListener('touchstart', unlock);
+		};
+		document.addEventListener('click', unlock);
+		document.addEventListener('keydown', unlock);
+		document.addEventListener('touchstart', unlock);
+		return () => {
+			document.removeEventListener('click', unlock);
+			document.removeEventListener('keydown', unlock);
+			document.removeEventListener('touchstart', unlock);
+		};
 	}, []);
 
 	const holdProgress = Math.min(1, Math.max(0, (HOLD_DURATION_MS - holdRemainingMs) / HOLD_DURATION_MS));

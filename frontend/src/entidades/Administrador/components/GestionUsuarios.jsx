@@ -34,6 +34,17 @@ const GestionUsuarios = () => {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Auto-refresh para reflejar cambios de otros clientes sin recargar la página.
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (!editando && !guardando) {
+        cargar();
+      }
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, [cargar, editando, guardando]);
+
   const mostrarAviso = (msg) => {
     setAviso(msg);
     setTimeout(() => setAviso(''), 3500);
@@ -57,8 +68,6 @@ const GestionUsuarios = () => {
   };
 
   const toggleBloqueo = async (u) => {
-    const accion = u.bloqueado ? 'desbloquear' : 'bloquear';
-    if (!window.confirm(`¿Deseas ${accion} al usuario ${u.nombre || u.email}?`)) return;
     try {
       await bloquearUsuario(u.id, !u.bloqueado);
       mostrarAviso(`Usuario ${u.bloqueado ? 'desbloqueado' : 'bloqueado'} correctamente.`);
@@ -69,7 +78,6 @@ const GestionUsuarios = () => {
   };
 
   const eliminarUsuario = async (u) => {
-    if (!window.confirm(`¿Eliminar al usuario ${u.nombre || u.email}? Esta acción no se puede deshacer.`)) return;
     try {
       await deleteUsuario(u.id);
       mostrarAviso('Usuario eliminado correctamente.');
@@ -100,7 +108,7 @@ const GestionUsuarios = () => {
     <div className="gu-root">
       <div className="gu-header">
         <h2 className="gu-title">Gestión de Usuarios</h2>
-        <button className="gu-btn-refresh" onClick={cargar} title="Recargar">↻</button>
+        <button className="gu-btn-refresh" onClick={cargar} title="Actualizar">Actualizar</button>
       </div>
 
       {aviso && <div className="gu-aviso">{aviso}</div>}
@@ -131,7 +139,7 @@ const GestionUsuarios = () => {
                     <p className="gu-fila__nombre">{u.nombre || '(sin nombre)'}</p>
                     <p className="gu-fila__email">{u.email}</p>
                     <span className={`gu-rol gu-rol--${u.rol?.toLowerCase()}`}>{u.rol}</span>
-                    {u.bloqueado && <span className="gu-bloqueado-tag">🔒 Bloqueado</span>}
+                    {u.bloqueado && <span className="gu-bloqueado-tag">Bloqueado</span>}
                     <div className="gu-fila__confianza">
                       <span className="gu-confianza-label">Confianza:</span> {renderConfianza(u)}
                     </div>
@@ -144,20 +152,20 @@ const GestionUsuarios = () => {
                     onClick={() => iniciarEdicion(u)}
                     title="Editar usuario"
                   >
-                    ✏️ Editar
+                    Editar
                   </button>
                   <button
                     className={`gu-btn ${u.bloqueado ? 'gu-btn--desbloquear' : 'gu-btn--bloquear'}`}
                     onClick={() => toggleBloqueo(u)}
                   >
-                    {u.bloqueado ? '🔓 Desbloquear' : '🔒 Bloquear'}
+                    {u.bloqueado ? 'Desbloquear' : 'Bloquear'}
                   </button>
                   <button
                     className="gu-btn gu-btn--eliminar"
                     onClick={() => eliminarUsuario(u)}
                     title="Eliminar usuario"
                   >
-                    🗑️ Eliminar
+                    Eliminar
                   </button>
                 </div>
               </div>

@@ -34,8 +34,13 @@ const DashboardGuardia = () => {
 			const data = await guardiaService.getIncidentesActivos();
 			setAlertas(Array.isArray(data) ? data : []);
 		} catch (error) {
-			const message = error?.response?.data?.message || 'No se pudo cargar alertas activas';
-			setErrorAlertas(message);
+			const message = String(error?.response?.data?.message || '').trim();
+			if (message.toLowerCase().includes('no hay alerta')) {
+				setAlertas([]);
+				setErrorAlertas('');
+			} else {
+				setErrorAlertas(message || 'No se pudo cargar alertas activas');
+			}
 		} finally {
 			setLoadingAlertas(false);
 		}
@@ -141,11 +146,11 @@ const DashboardGuardia = () => {
 				setIdEstado(response.id);
 			}
 			const etiqueta = nuevoValor ? 'En Servicio' : 'No en Servicio';
-			setAvisoEstado(`✓ Estado guardado: ${etiqueta}`);
+			setAvisoEstado(`Estado guardado: ${etiqueta}`);
 			setTimeout(() => setAvisoEstado(''), 4000);
 		} catch (e) {
 			const msg = e?.response?.data?.message || e?.message || 'Error al guardar el estado';
-			setAvisoEstado(`✗ ${msg}`);
+			setAvisoEstado(msg);
 		} finally {
 			setGuardandoEstado(false);
 		}
@@ -370,7 +375,7 @@ const DashboardGuardia = () => {
 										gap: '0.4rem'
 									}}
 								>
-									☰ Menú {menuAbierto ? '▲' : '▼'}
+										Menu {menuAbierto ? '▲' : '▼'}
 								</button>
 								{menuAbierto && (
 									<div style={{
@@ -386,8 +391,8 @@ const DashboardGuardia = () => {
 										overflow: 'hidden'
 									}}>
 										{[
-											{ id: 'alertas', icono: '🔔', label: 'Alertas Activas' },
-											{ id: 'contactos', icono: '👥', label: 'Contactos de Confianza' }
+											{ id: 'alertas', label: 'Alertas Activas' },
+											{ id: 'contactos', label: 'Contactos de Confianza' }
 										].map(op => (
 											<button
 												key={op.id}
@@ -408,7 +413,7 @@ const DashboardGuardia = () => {
 													borderBottom: '1px solid #f1f5f9'
 												}}
 											>
-												{op.icono} {op.label}
+												{op.label}
 											</button>
 										))}
 									</div>
@@ -448,7 +453,7 @@ const DashboardGuardia = () => {
 							marginTop: '0.5rem',
 							fontSize: '0.82rem',
 							fontWeight: 600,
-							color: avisoEstado.startsWith('✓') ? '#059669' : '#b91c1c'
+							color: avisoEstado.toLowerCase().startsWith('error') ? '#b91c1c' : '#059669'
 						}}>
 							{avisoEstado}
 						</div>

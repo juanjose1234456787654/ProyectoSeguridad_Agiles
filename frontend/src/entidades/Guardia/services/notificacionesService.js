@@ -60,18 +60,6 @@ const mostrarNotificacionOS = (titulo, cuerpo, onClick) => {
 
 const MP3_URL = '/Alarma.mp3';
 
-// Instancia única reutilizable — se desbloquea en el primer gesto del usuario
-let _alarmaAudio = null;
-
-const _getAlarmaAudio = () => {
-  if (!_alarmaAudio) {
-    _alarmaAudio = new Audio(MP3_URL);
-    _alarmaAudio.preload = 'auto';
-    _alarmaAudio.volume = 1.0;
-  }
-  return _alarmaAudio;
-};
-
 let _audioCtx = null;
 
 const getAudioContext = async () => {
@@ -84,25 +72,39 @@ const getAudioContext = async () => {
   return _audioCtx;
 };
 
+// MP3 decodificado como PCM en memoria — carga única, reproducción instantánea
+let _alarmaBuffer = null;
+let _alarmaBufferPromise = null;
+
+const _cargarAlarmaBuffer = () => {
+  if (_alarmaBuffer) return Promise.resolve(_alarmaBuffer);
+  if (_alarmaBufferPromise) return _alarmaBufferPromise;
+
+  _alarmaBufferPromise = (async () => {
+    try {
+      const ctx = await getAudioContext();
+      const response = await fetch(MP3_URL);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const arrayBuffer = await response.arrayBuffer();
+      _alarmaBuffer = await ctx.decodeAudioData(arrayBuffer);
+      return _alarmaBuffer;
+    } catch (e) {
+      _alarmaBufferPromise = null; // permitir reintento
+      throw e;
+    }
+  })();
+
+  return _alarmaBufferPromise;
+};
+
 /**
- * Desbloquea el elemento Audio y el AudioContext durante un gesto del usuario.
- * Técnica: play() + pause() inmediato — el navegador marca el elemento como
- * "desbloqueado" y los .play() posteriores (desde WebSocket) funcionan sin restricción.
+ * Desbloquea el AudioContext durante un gesto del usuario y precarga el buffer MP3.
  */
 const preinicializarAudio = async () => {
   try {
-    const audio = _getAlarmaAudio();
-    const p = audio.play();
-    if (p !== undefined) {
-      await p;
-      audio.pause();
-      audio.currentTime = 0;
-    }
-  } catch {
-    // El MP3 puede no estar aún cargado; el desbloqueo igual queda registrado
-  }
-  // También calentar AudioContext (fallback)
-  try { await getAudioContext(); } catch { /* silencioso */ }
+    await getAudioContext();
+    await _cargarAlarmaBuffer();
+  } catch { /* silencioso */ }
 };
 
 /**
@@ -138,16 +140,20 @@ const _reproducirBeeps = async () => {
 };
 
 /**
- * Reproduce Alarma.mp3 usando la instancia pre-desbloqueada.
+ * Reproduce Alarma.mp3 via AudioBufferSourceNode (nuevo nodo por cada llamada,
+ * sin conflictos de reproducción simultánea, arranque instantáneo desde PCM).
  * Si falla, usa beeps Web Audio como fallback.
  */
 const reproducirAlarma = async () => {
   try {
-    const audio = _getAlarmaAudio();
-    audio.currentTime = 0; // rebobinar si ya sonó antes
-    await audio.play();
+    const ctx = await getAudioContext();
+    const buffer = await _cargarAlarmaBuffer();
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
   } catch (e) {
-    console.warn('[notificaciones] MP3 bloqueado, usando beeps:', e.message);
+    console.warn('[notificaciones] MP3 no disponible, usando beeps:', e.message);
     try {
       await _reproducirBeeps();
     } catch (e2) {
@@ -171,7 +177,7 @@ const notificar = (datos, onClickOS) => {
 
   reproducirAlarma(); // async — se ejecuta sin bloquear
   mostrarNotificacionOS(
-    `🚨 ALERTA DE EMERGENCIA – UTA`,
+    `ALERTA DE EMERGENCIA - UTA`,
     `De: ${emisor} | Motivo: ${motivo}${zona}`,
     onClickOS
   );

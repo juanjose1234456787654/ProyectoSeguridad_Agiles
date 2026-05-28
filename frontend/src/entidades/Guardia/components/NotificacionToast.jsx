@@ -61,7 +61,6 @@ const NotificacionToast = ({ notificacion, onDismiss }) => {
 
       {/* Cabecera */}
       <div className="nt-cabecera">
-        <span className="nt-icono" aria-hidden="true">🚨</span>
         <strong className="nt-titulo">ALERTA DE EMERGENCIA</strong>
         <button
           type="button"

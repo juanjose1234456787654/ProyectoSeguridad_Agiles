@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getGuardiasEstado } from '../services/adminService';
 
+const esEnServicio = (estado) => {
+  const valor = String(estado || '').trim().toLowerCase();
+  return (
+    valor === 'en servicio' ||
+    valor === 'en_servicio' ||
+    valor === 'activo' ||
+    valor === 'check' ||
+    valor === 'true' ||
+    valor.includes('en servicio')
+  );
+};
+
 const EstadoBadge = ({ estado }) => {
-  const enServicio = String(estado || '').trim().toLowerCase() === 'en servicio';
+  const enServicio = esEnServicio(estado);
   return (
     <span style={{
       display: 'inline-block',
@@ -13,7 +25,7 @@ const EstadoBadge = ({ estado }) => {
       background: enServicio ? '#d1fae5' : '#fee2e2',
       color: enServicio ? '#065f46' : '#991b1b'
     }}>
-      {enServicio ? '🟢 En Servicio' : '🔴 No en Servicio'}
+      {enServicio ? 'En Servicio' : 'No en Servicio'}
     </span>
   );
 };
@@ -52,8 +64,6 @@ const GuardiasEstado = ({ refreshKey = 0 }) => {
     return () => clearInterval(intervalo);
   }, [cargar]);
 
-  const esEnServicio = (estado) => String(estado || '').trim().toLowerCase() === 'en servicio';
-
   const guardiasFiltrados = guardias.filter(g => {
     if (filtro === 'enServicio') return esEnServicio(g.estado);
     if (filtro === 'noServicio') return !esEnServicio(g.estado);
@@ -91,8 +101,8 @@ const GuardiasEstado = ({ refreshKey = 0 }) => {
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
         {[
           { valor: 'todos', label: 'Todos' },
-          { valor: 'enServicio', label: '🟢 En Servicio' },
-          { valor: 'noServicio', label: '🔴 No en Servicio' }
+          { valor: 'enServicio', label: 'En Servicio' },
+          { valor: 'noServicio', label: 'No en Servicio' }
         ].map(op => (
           <button
             key={op.valor}
@@ -116,7 +126,7 @@ const GuardiasEstado = ({ refreshKey = 0 }) => {
           onClick={cargar}
           style={{ marginLeft: 'auto', padding: '0.4rem 1rem', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '0.85rem' }}
         >
-          🔄 Actualizar
+          Actualizar
         </button>
         {ultimaActualizacion && (
           <span style={{ fontSize: '0.75rem', color: '#9ca3af', alignSelf: 'center' }}>

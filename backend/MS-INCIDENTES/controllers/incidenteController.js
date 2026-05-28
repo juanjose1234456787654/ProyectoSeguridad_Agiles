@@ -102,20 +102,20 @@ const getById = async (req, res) => {
 // POST /api/incidentes
 const create = async (req, res) => {
   try {
-    const { motivo, estado, idZona } = req.body;
+    const { motivo, estado, idZona, lat, lng } = req.body;
     let idUsuario = req.usuario?.id || req.body.idUsuario;
     
     // Asegurar que idUsuario sea string y sin espacios
     idUsuario = String(idUsuario).trim();
 
     console.log(`[create] Creando incidente - idUsuario: "${idUsuario}" (length: ${idUsuario.length}, type: ${typeof idUsuario})`);
-    console.log(`[create] motivo: "${motivo}", estado: "${estado}", idZona: "${idZona}"`);
+    console.log(`[create] motivo: "${motivo}", estado: "${estado}", idZona: "${idZona}", lat: "${lat}", lng: "${lng}"`);
 
     if (!motivo || !idUsuario) {
       return res.status(400).json({ message: 'Faltan campos obligatorios: motivo' });
     }
 
-    const nuevo = await Incidente.create({ motivo, estado, idZona, idUsuario });
+    const nuevo = await Incidente.create({ motivo, estado, idZona, idUsuario, lat, lng });
     
     console.log(`[create] Incidente creado: ${nuevo.id} para usuario: "${nuevo.idUsuario}"`);
 
