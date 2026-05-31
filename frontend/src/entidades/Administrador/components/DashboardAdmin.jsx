@@ -4,16 +4,61 @@ import { useAuth } from '../../../contexts/AuthContext';
 import MapaCampus from '../../Guardia/components/MapaCampus';
 import guardiaService from '../../Guardia/services/guardiaService';
 import alertaService from '../../Guardia/services/alertaService';
-import EstadisticasPanel from './EstadisticasPanel';
+import { getGuardiasEstado } from '../services/adminService';
 import GestionUsuarios from './GestionUsuarios';
 import GuardiasEstado from './GuardiasEstado';
+import EstadisticasPanel from './EstadisticasPanel';
 import '../styles/DashboardAdmin.css';
 
 const SECCIONES_MENU = [
+  { id: 'mapa', label: 'Mapa y Alertas' },
   { id: 'usuarios', label: 'Gestión de Usuarios' },
-  { id: 'guardias', label: 'Guardias En Servicio' },
+  { id: 'guardias', label: 'Gestión de Guardias' },
   { id: 'estadisticas', label: 'Estadísticas' }
 ];
+
+const esEnServicio = (estado) => {
+  const valor = String(estado || '').trim().toLowerCase();
+
+  if (
+    valor === 'no en servicio' ||
+    valor === 'no_en_servicio' ||
+    valor === 'inactivo' ||
+    valor === 'false' ||
+    valor.startsWith('no ')
+  ) {
+    return false;
+  }
+
+  return (
+    valor === 'en servicio' ||
+    valor === 'en_servicio' ||
+    valor === 'activo' ||
+    valor === 'check' ||
+    valor === 'true'
+  );
+};
+
+const estaAlertaAsignada = (alerta) => {
+  if (!alerta) return false;
+  return Boolean(
+    alerta.idEstadoGuardia ||
+    alerta.idGuardia ||
+    alerta.idGuardiaAsignado ||
+    String(alerta.estado || '').toLowerCase().includes('asign')
+  );
+};
+
+const nombreGuardiaAsignado = (alerta) => {
+  if (!alerta) return '';
+  return (
+    alerta.nombreGuardiaAsignado ||
+    alerta.nombreGuardia ||
+    alerta.emailGuardiaAsignado ||
+    alerta.emailGuardia ||
+    ''
+  );
+};
 
 const DashboardAdmin = () => {
   const { logout } = useAuth();
@@ -21,7 +66,14 @@ const DashboardAdmin = () => {
   const [alertasActivas, setAlertasActivas] = useState([]);
   const [zonasApi, setZonasApi] = useState([]);
   const [sidebarAbierto, setSidebarAbierto] = useState(true);
-  const [seccionActiva, setSeccionActiva] = useState('usuarios');
+  const [seccionActiva, setSeccionActiva] = useState('mapa');
+  const [alertaSeleccionada, setAlertaSeleccionada] = useState(null);
+  const [panelGuardiasAbierto, setPanelGuardiasAbierto] = useState(false);
+  const [guardiasEnServicio, setGuardiasEnServicio] = useState([]);
+  const [cargandoGuardias, setCargandoGuardias] = useState(false);
+  const [avisoAsignacion, setAvisoAsignacion] = useState('');
+  const [asignandoGuardiaId, setAsignandoGuardiaId] = useState(null);
+  const [confirmacionAsignacion, setConfirmacionAsignacion] = useState(null);
   const [guardiaRefreshKey, setGuardiaRefreshKey] = useState(0);
   const socketRef = useRef(null);
   const socketSeguridadRef = useRef(null);
@@ -61,7 +113,6 @@ const DashboardAdmin = () => {
     return () => socketRef.current?.disconnect();
   }, []);
 
-  // Socket directo a MS-SEGURIDAD para cambios de estado de guardias en tiempo real
   useEffect(() => {
     socketSeguridadRef.current = io('http://localhost:4003', {
       transports: ['websocket']
@@ -74,9 +125,165 @@ const DashboardAdmin = () => {
     });
     socketSeguridadRef.current.on('guardia:estadoCambiado', () => {
       setGuardiaRefreshKey(k => k + 1);
+      if (panelGuardiasAbierto) {
+        getGuardiasEstado()
+          .then((data) => {
+            const lista = Array.isArray(data) ? data.filter(g => esEnServicio(g.estado)) : [];
+            setGuardiasEnServicio(lista);
+          })
+          .catch(() => {});
+      }
     });
     return () => socketSeguridadRef.current?.disconnect();
-  }, []);
+  }, [panelGuardiasAbierto]);
+
+  useEffect(() => {
+    setPanelGuardiasAbierto(false);
+    setAvisoAsignacion('');
+    setConfirmacionAsignacion(null);
+  }, [alertaSeleccionada?.id]);
+
+  const cargarGuardiasEnServicio = async () => {
+    try {
+      setCargandoGuardias(true);
+      const data = await getGuardiasEstado();
+      const lista = Array.isArray(data) ? data.filter(g => esEnServicio(g.estado)) : [];
+      setGuardiasEnServicio(lista);
+    } catch {
+      setGuardiasEnServicio([]);
+    } finally {
+      setCargandoGuardias(false);
+    }
+  };
+
+  const onAbrirPanelGuardias = async () => {
+    if (estaAlertaAsignada(alertaSeleccionada)) {
+      setAvisoAsignacion('Esta alerta ya está asignada.');
+      return;
+    }
+    setPanelGuardiasAbierto(v => !v);
+    if (!panelGuardiasAbierto && guardiasEnServicio.length === 0) {
+      await cargarGuardiasEnServicio();
+    }
+  };
+
+  const onSeleccionarGuardiaAsignacion = (guardia) => {
+    if (!alertaSeleccionada?.id || !guardia?.id || asignandoGuardiaId) return;
+    if (estaAlertaAsignada(alertaSeleccionada)) {
+      setAvisoAsignacion('Esta alerta ya está asignada.');
+      return;
+    }
+    setConfirmacionAsignacion({ guardia, alerta: alertaSeleccionada });
+  };
+
+  const onConfirmarAsignacion = async () => {
+    if (!confirmacionAsignacion?.guardia?.id || !confirmacionAsignacion?.alerta?.id) return;
+    if (estaAlertaAsignada(confirmacionAsignacion.alerta)) {
+      setAvisoAsignacion('Esta alerta ya está asignada.');
+      setConfirmacionAsignacion(null);
+      return;
+    }
+
+    const guardia = confirmacionAsignacion.guardia;
+    const alerta = confirmacionAsignacion.alerta;
+
+    try {
+      setAsignandoGuardiaId(guardia.id);
+      setAvisoAsignacion('');
+      await guardiaService.asignarAlerta({
+        idIncidente: alerta.id,
+        idEstadoGuardia: guardia.id
+      });
+      const etiquetaGuardia = guardia.nombre || guardia.email || guardia.idUsuario || `Guardia ${guardia.id}`;
+      setAlertasActivas(prev => prev.map(a => (
+        a.id === alerta.id
+          ? {
+            ...a,
+            idEstadoGuardia: guardia.id,
+            estado: a.estado || 'Asignado',
+            nombreGuardiaAsignado: etiquetaGuardia
+          }
+          : a
+      )));
+      setAlertaSeleccionada(prev => (
+        prev?.id === alerta.id
+          ? {
+            ...prev,
+            idEstadoGuardia: guardia.id,
+            estado: prev.estado || 'Asignado',
+            nombreGuardiaAsignado: etiquetaGuardia
+          }
+          : prev
+      ));
+      setAvisoAsignacion(`Alerta ${alerta.id} asignada a ${etiquetaGuardia}.`);
+      setPanelGuardiasAbierto(false);
+      setConfirmacionAsignacion(null);
+      await cargarAlertas();
+    } catch (e) {
+      setAvisoAsignacion(e?.response?.data?.message || 'No se pudo asignar la alerta.');
+    } finally {
+      setAsignandoGuardiaId(null);
+    }
+  };
+
+  const renderDetalleAlerta = (alerta) => {
+    const asignada = estaAlertaAsignada(alerta);
+    return (
+      <div className="da-assign-detail">
+        <p className={`da-assign-detail__status ${asignada ? 'da-assign-detail__status--ok' : 'da-assign-detail__status--pending'}`}>
+          {asignada ? 'Asignado' : 'No Asignado'}
+        </p>
+        <button
+          type="button"
+          className="da-assign-detail__toggle"
+          onClick={onAbrirPanelGuardias}
+          disabled={asignada}
+        >
+          Asignar a Guardias de Seguridad
+        </button>
+
+        {asignada && (
+          <p className="da-assign-detail__msg da-assign-detail__msg--ok">
+            La alerta ya fue asignada y no permite reasignación.
+          </p>
+        )}
+
+        {panelGuardiasAbierto && (
+          <div className="da-assign-detail__panel">
+            {cargandoGuardias && <p className="da-assign-detail__msg">Cargando guardias en servicio...</p>}
+            {!cargandoGuardias && guardiasEnServicio.length === 0 && (
+              <p className="da-assign-detail__msg">No hay guardias en servicio disponibles.</p>
+            )}
+
+            {!cargandoGuardias && guardiasEnServicio.length > 0 && (
+              <div className="da-assign-detail__list">
+                {guardiasEnServicio.map((guardia) => (
+                  <button
+                    key={guardia.id}
+                    type="button"
+                    className="da-assign-detail__guardia"
+                    onClick={() => onSeleccionarGuardiaAsignacion(guardia)}
+                    disabled={Boolean(asignandoGuardiaId) || asignada}
+                  >
+                    <span className="da-assign-detail__guardia-name">
+                      {guardia.nombre || guardia.email || guardia.idUsuario || `Guardia ${guardia.id}`}
+                    </span>
+                    <span className="da-assign-detail__guardia-meta">ID Estado: {guardia.id}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {avisoAsignacion && (
+              <p className={`da-assign-detail__msg ${avisoAsignacion.includes('asignada') ? 'da-assign-detail__msg--ok' : 'da-assign-detail__msg--error'}`}>
+                {avisoAsignacion}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const seleccionarSeccion = (id) => {
     setSeccionActiva(id);
@@ -132,8 +339,7 @@ const DashboardAdmin = () => {
       {/* ─── CONTENIDO PRINCIPAL ───────────────────────────────────────── */}
       <main className="da-main">
 
-        {/* MAPA – ocupa toda la parte superior */}
-        <section className="da-mapa-section">
+        <section className={`da-mapa-section ${seccionActiva === 'mapa' ? 'da-mapa-section--full' : ''}`}>
           <div className="da-mapa-header">
             <div>
               <h1 className="da-mapa-title">Campus UTA - Monitoreo en Tiempo Real</h1>
@@ -146,31 +352,95 @@ const DashboardAdmin = () => {
             )}
           </div>
           <div className="da-mapa-wrap">
-            <MapaCampus alertas={alertasActivas} zonasApi={zonasApi} height="100%" />
+            <MapaCampus
+              alertas={alertasActivas}
+              zonasApi={zonasApi}
+              height="100%"
+              alertaFoco={alertaSeleccionada}
+              alertaSeleccionada={alertaSeleccionada}
+              onAlertaSeleccionadaChange={setAlertaSeleccionada}
+              renderAlertaDetalle={renderDetalleAlerta}
+            />
+
+            <div className="da-alertas-float">
+              <div className="da-alertas-float__head">Alertas Activas</div>
+              {alertasActivas.length === 0 && (
+                <p className="da-alertas-float__empty">Sin alertas activas</p>
+              )}
+
+              {alertasActivas.map((alerta) => (
+                <button
+                  key={alerta.id}
+                  type="button"
+                  className={`da-alertas-float__item ${alertaSeleccionada?.id === alerta.id ? 'da-alertas-float__item--active' : ''}`}
+                  onClick={() => setAlertaSeleccionada(alerta)}
+                >
+                  <span className="da-alertas-float__item-id">{alerta.id}</span>
+                  <span className="da-alertas-float__item-motivo">{alerta.motivo || 'Sin motivo'}</span>
+                  <span className={`da-alertas-float__item-state ${estaAlertaAsignada(alerta) ? 'da-alertas-float__item-state--ok' : 'da-alertas-float__item-state--pending'}`}>
+                    {estaAlertaAsignada(alerta) ? 'Asignado' : 'No Asignado'}
+                  </span>
+                  {estaAlertaAsignada(alerta) && nombreGuardiaAsignado(alerta) && (
+                    <span className="da-alertas-float__item-assignee">Asignado a: {nombreGuardiaAsignado(alerta)}</span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* PANEL INFERIOR – gestión + estadísticas */}
-        <section className="da-panel-section">
-          <div className="da-panel-tabs">
-            {SECCIONES_MENU.map(s => (
-              <button
-                key={s.id}
-                className={`da-panel-tab ${seccionActiva === s.id ? 'da-panel-tab--active' : ''}`}
-                onClick={() => setSeccionActiva(s.id)}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+        {seccionActiva !== 'mapa' && (
+          <section className="da-panel-section">
+            <div className="da-panel-tabs">
+              {SECCIONES_MENU.filter(s => s.id !== 'mapa').map(s => (
+                <button
+                  key={s.id}
+                  className={`da-panel-tab ${seccionActiva === s.id ? 'da-panel-tab--active' : ''}`}
+                  onClick={() => setSeccionActiva(s.id)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
 
-          <div className="da-panel-content">
-            {seccionActiva === 'estadisticas' && <EstadisticasPanel />}
-            {seccionActiva === 'usuarios'     && <GestionUsuarios />}
-            {seccionActiva === 'guardias'     && <GuardiasEstado refreshKey={guardiaRefreshKey} />}
-          </div>
-        </section>
+            <div className="da-panel-content">
+              {seccionActiva === 'usuarios' && <GestionUsuarios />}
+              {seccionActiva === 'guardias' && <GuardiasEstado refreshKey={guardiaRefreshKey} />}
+              {seccionActiva === 'estadisticas' && <EstadisticasPanel />}
+            </div>
+          </section>
+        )}
       </main>
+
+      {confirmacionAsignacion && (
+        <div className="da-modal" role="dialog" aria-modal="true" aria-label="Confirmar asignación">
+          <div className="da-modal__card">
+            <h3 className="da-modal__title">Confirmar asignación</h3>
+            <p className="da-modal__text">
+              ¿Desea asignar la alerta <strong>{confirmacionAsignacion.alerta.id}</strong> al guardia
+              {' '}<strong>{confirmacionAsignacion.guardia.nombre || confirmacionAsignacion.guardia.email || confirmacionAsignacion.guardia.idUsuario || confirmacionAsignacion.guardia.id}</strong>?
+            </p>
+            <div className="da-modal__actions">
+              <button
+                type="button"
+                className="da-modal__btn da-modal__btn--ghost"
+                onClick={() => setConfirmacionAsignacion(null)}
+                disabled={Boolean(asignandoGuardiaId)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="da-modal__btn da-modal__btn--primary"
+                onClick={onConfirmarAsignacion}
+                disabled={Boolean(asignandoGuardiaId)}
+              >
+                {asignandoGuardiaId ? 'Asignando...' : 'Confirmar asignación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -179,6 +179,18 @@ const close = async (req, res) => {
       return res.status(400).json({ message: 'El incidente ya está cerrado' });
     }
 
+    if (req.usuario?.rol === 'Guardia') {
+      const asignacionActual = await Incidente.getAsignacionActualByIncidente(req.params.id);
+      const idGuardiaAsignado = String(asignacionActual?.idGuardiaAsignado || '').trim().toUpperCase();
+      const idGuardiaActual = String(req.usuario?.id || '').trim().toUpperCase();
+
+      if (!asignacionActual || !idGuardiaAsignado || idGuardiaAsignado !== idGuardiaActual) {
+        return res.status(403).json({
+          message: 'Solo el guardia asignado a esta alerta puede cerrar el caso'
+        });
+      }
+    }
+
     const { acciones } = req.body || {};
     const idGuardia = req.usuario?.id || null;
     const cerrado = await Incidente.close(req.params.id, acciones || null);

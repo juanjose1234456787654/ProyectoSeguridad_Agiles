@@ -6,6 +6,7 @@ import DashboardEstudiante from './entidades/Estudiante/components/DashboardEstu
 import DashboardDocente from './entidades/Docente/components/DashboardDocente';
 import DashboardPersonal from './entidades/Personal/components/DashboardPersonal';
 import DashboardGuardia from './entidades/Guardia/components/DashboardGuardia';
+import MapaGuardia from './entidades/Guardia/components/MapaGuardia';
 import CerrarReporteGuardia from './entidades/Guardia/components/CerrarReporteGuardia';
 import AlertasUsuario from './entidades/Guardia/components/AlertasUsuario';
 import DashboardAdmin from './entidades/Administrador/components/DashboardAdmin';
@@ -37,6 +38,11 @@ function App() {
           <Route path="/guardia" element={
             <PrivateRoute allowedRoles={['Guardia']}>
               <DashboardGuardia />
+            </PrivateRoute>
+          } />
+          <Route path="/guardia/mapa/:idIncidente" element={
+            <PrivateRoute allowedRoles={['Guardia']}>
+              <MapaGuardia />
             </PrivateRoute>
           } />
           <Route path="/alertas" element={

@@ -4,6 +4,7 @@ import authService from '../../../auth/login/services/authService';
 
 const API_BASE = 'http://localhost:4000/api';
 const SOCKET_URL = 'http://localhost:4000';
+const SOCKET_SEGURIDAD_URL = 'http://localhost:4003';
 
 const getToken = () => authService.getCurrentUser()?.token;
 
@@ -93,28 +94,49 @@ const asignarAlerta = async ({ idIncidente, idEstadoGuardia }) => {
 
 const connectGuardiaSocket = (handlers = {}) => {
 	const token = getToken();
-	const socket = io(SOCKET_URL, {
+	const socketIncidentes = io(SOCKET_URL, {
+		transports: ['websocket'],
+		auth: { token }
+	});
+	const socketSeguridad = io(SOCKET_SEGURIDAD_URL, {
 		transports: ['websocket'],
 		auth: { token }
 	});
 
-	socket.on('incidente:creado', (payload) => {
+	socketIncidentes.on('incidente:creado', (payload) => {
 		if (handlers.onIncidenteChange) handlers.onIncidenteChange('incidente:creado', payload);
 	});
 
-	socket.on('incidente:actualizado', (payload) => {
+	socketIncidentes.on('incidente:actualizado', (payload) => {
 		if (handlers.onIncidenteChange) handlers.onIncidenteChange('incidente:actualizado', payload);
 	});
 
-	socket.on('incidente:cerrado', (payload) => {
+	socketIncidentes.on('incidente:cerrado', (payload) => {
 		if (handlers.onIncidenteChange) handlers.onIncidenteChange('incidente:cerrado', payload);
 	});
 
-	socket.on('connect_error', (error) => {
+	socketSeguridad.on('alerta:asignada', (payload) => {
+		if (handlers.onAsignacionChange) handlers.onAsignacionChange('alerta:asignada', payload);
+	});
+
+	socketSeguridad.on('alerta:desasignada', (payload) => {
+		if (handlers.onAsignacionChange) handlers.onAsignacionChange('alerta:desasignada', payload);
+	});
+
+	socketIncidentes.on('connect_error', (error) => {
 		if (handlers.onError) handlers.onError(error);
 	});
 
-	return socket;
+	socketSeguridad.on('connect_error', (error) => {
+		if (handlers.onError) handlers.onError(error);
+	});
+
+	return {
+		disconnect: () => {
+			socketIncidentes.disconnect();
+			socketSeguridad.disconnect();
+		}
+	};
 };
 
 export default {

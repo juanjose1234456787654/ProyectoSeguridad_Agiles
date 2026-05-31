@@ -154,6 +154,8 @@ const Incidente = {
           z.NOM_ZON     AS nombreZona,
           i.ID_USU_REF  AS idUsuario,
           u.COR_INS_REF_USU AS emailUsuario,
+          asi.ID_EST_PER AS idEstadoGuardia,
+          eg.ID_USU_REF  AS idGuardiaAsignado,
           LTRIM(RTRIM(CONCAT(
             COALESCE(p.NOM1_PER, ''), ' ',
             COALESCE(p.NOM2_PER, ''), ' ',
@@ -164,6 +166,13 @@ const Incidente = {
         LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
         LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
         LEFT JOIN [BD_UTA].dbo.PERSONAS_UTA p ON p.COR_PER = u.COR_INS_REF_USU
+        OUTER APPLY (
+          SELECT TOP 1 a.ID_EST_PER
+          FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+          WHERE a.ID_INC_PER = i.ID_INC
+          ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC
+        ) asi
+        LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = asi.ID_EST_PER
         WHERE i.ID_INC = ?`,
         [id]
       );
@@ -178,14 +187,40 @@ const Incidente = {
           i.LAT_INC     AS lat,
           i.LNG_INC     AS lng,
           z.NOM_ZON     AS nombreZona,
-          i.ID_USU_REF  AS idUsuario
+          i.ID_USU_REF  AS idUsuario,
+          asi.ID_EST_PER AS idEstadoGuardia,
+          eg.ID_USU_REF  AS idGuardiaAsignado
         FROM INCIDENTES i
         LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+        OUTER APPLY (
+          SELECT TOP 1 a.ID_EST_PER
+          FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+          WHERE a.ID_INC_PER = i.ID_INC
+          ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC
+        ) asi
+        LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = asi.ID_EST_PER
         WHERE i.ID_INC = ?`,
         [id]
       );
       return rows[0] || null;
     }
+  },
+
+  getAsignacionActualByIncidente: async (idIncidente) => {
+    const [rows] = await db.query(
+      `SELECT TOP 1
+        a.ID_ASI    AS idAsignacion,
+        a.ID_INC_PER AS idIncidente,
+        a.ID_EST_PER AS idEstadoGuardia,
+        eg.ID_USU_REF AS idGuardiaAsignado
+      FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+      LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = a.ID_EST_PER
+      WHERE a.ID_INC_PER = ?
+      ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC`,
+      [idIncidente]
+    );
+
+    return rows[0] || null;
   },
 
   findActivos: async () => {
@@ -201,10 +236,19 @@ const Incidente = {
           z.NOM_ZON     AS nombreZona,
           i.ID_USU_REF  AS idUsuario,
           u.COR_INS_REF_USU AS emailUsuario,
+          asi.ID_EST_PER AS idEstadoGuardia,
+          eg.ID_USU_REF   AS idGuardiaAsignado,
           i.ACCIONES_INC AS acciones
         FROM INCIDENTES i
         LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
         LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+        OUTER APPLY (
+          SELECT TOP 1 a.ID_EST_PER
+          FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+          WHERE a.ID_INC_PER = i.ID_INC
+          ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC
+        ) asi
+        LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = asi.ID_EST_PER
         WHERE i.EST_INC = 'Activo'
         ORDER BY i.ID_INC`
       );
@@ -222,10 +266,19 @@ const Incidente = {
             i.LNG_INC     AS lng,
             z.NOM_ZON     AS nombreZona,
             i.ID_USU_REF  AS idUsuario,
-            u.COR_INS_REF_USU AS emailUsuario
+            u.COR_INS_REF_USU AS emailUsuario,
+            asi.ID_EST_PER AS idEstadoGuardia,
+            eg.ID_USU_REF   AS idGuardiaAsignado
           FROM INCIDENTES i
           LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
           LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+          OUTER APPLY (
+            SELECT TOP 1 a.ID_EST_PER
+            FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+            WHERE a.ID_INC_PER = i.ID_INC
+            ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC
+          ) asi
+          LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = asi.ID_EST_PER
           WHERE i.EST_INC = 'Activo'
           ORDER BY i.ID_INC`
         );

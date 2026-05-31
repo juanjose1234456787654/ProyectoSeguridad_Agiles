@@ -3,13 +3,23 @@ import { getGuardiasEstado } from '../services/adminService';
 
 const esEnServicio = (estado) => {
   const valor = String(estado || '').trim().toLowerCase();
+
+  if (
+    valor === 'no en servicio' ||
+    valor === 'no_en_servicio' ||
+    valor === 'inactivo' ||
+    valor === 'false' ||
+    valor.startsWith('no ')
+  ) {
+    return false;
+  }
+
   return (
     valor === 'en servicio' ||
     valor === 'en_servicio' ||
     valor === 'activo' ||
     valor === 'check' ||
-    valor === 'true' ||
-    valor.includes('en servicio')
+    valor === 'true'
   );
 };
 

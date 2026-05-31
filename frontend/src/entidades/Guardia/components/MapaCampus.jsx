@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { GoogleMap, useLoadScript, Polygon, Marker, InfoWindow } from '@react-google-maps/api';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -179,19 +179,60 @@ const getPosicionAlerta = (alerta, zonasApi = []) => {
 	return ZONAS_CAMPUS[idx].center;
 };
 
-const MapaCampus = ({ alertas = [], zonasApi = [], height = '380px' }) => {
-	const [alertaSeleccionada, setAlertaSeleccionada] = useState(null);
+const MapaCampus = ({
+	alertas = [],
+	zonasApi = [],
+	height = '380px',
+	alertaFoco = null,
+	alertaSeleccionada = null,
+	onAlertaSeleccionadaChange = null,
+	renderAlertaDetalle = null
+}) => {
+	const [alertaSeleccionadaInterna, setAlertaSeleccionadaInterna] = useState(null);
+	const mapRef = useRef(null);
+	const alertaActiva = alertaSeleccionada || alertaSeleccionadaInterna;
+
+	const seleccionarAlerta = (alerta) => {
+		setAlertaSeleccionadaInterna(alerta);
+		if (onAlertaSeleccionadaChange) onAlertaSeleccionadaChange(alerta);
+	};
+
+	const limpiarAlertaSeleccionada = () => {
+		setAlertaSeleccionadaInterna(null);
+		if (onAlertaSeleccionadaChange) onAlertaSeleccionadaChange(null);
+	};
 
 	const { isLoaded, loadError } = useLoadScript({
 		googleMapsApiKey: GOOGLE_MAPS_API_KEY
 	});
 
 	const onMapLoad = useCallback((map) => {
+		mapRef.current = map;
 		if (!window.google?.maps) return;
+		if (alertaFoco) {
+			const posFoco = getPosicionAlerta(alertaFoco, zonasApi);
+			map.panTo(posFoco);
+			map.setZoom(19);
+			seleccionarAlerta(alertaFoco);
+			return;
+		}
 		const bounds = new window.google.maps.LatLngBounds();
 		PARCELA_UTA_PATH.forEach(p => bounds.extend(p));
 		map.fitBounds(bounds, 24);
-	}, []);
+	}, [alertaFoco, zonasApi]);
+
+	useEffect(() => {
+		if (!mapRef.current || !alertaFoco) return;
+		const posFoco = getPosicionAlerta(alertaFoco, zonasApi);
+		mapRef.current.panTo(posFoco);
+		mapRef.current.setZoom(19);
+		seleccionarAlerta(alertaFoco);
+	}, [alertaFoco, zonasApi]);
+
+	useEffect(() => {
+		if (!alertaSeleccionada) return;
+		setAlertaSeleccionadaInterna(alertaSeleccionada);
+	}, [alertaSeleccionada]);
 
 	if (loadError) {
 		return (
@@ -315,7 +356,7 @@ const MapaCampus = ({ alertas = [], zonasApi = [], height = '380px' }) => {
 							<Marker
 								key={alerta.id}
 								position={pos}
-								onClick={() => setAlertaSeleccionada(alerta)}
+								onClick={() => seleccionarAlerta(alerta)}
 								label={{
 									text: 'A',
 									fontSize: '18px'
@@ -326,24 +367,25 @@ const MapaCampus = ({ alertas = [], zonasApi = [], height = '380px' }) => {
 					})}
 
 					{/* InfoWindow al hacer clic en un marcador */}
-					{alertaSeleccionada && (
+					{alertaActiva && (
 						<InfoWindow
-							position={getPosicionAlerta(alertaSeleccionada, zonasApi)}
-							onCloseClick={() => setAlertaSeleccionada(null)}
+							position={getPosicionAlerta(alertaActiva, zonasApi)}
+							onCloseClick={limpiarAlertaSeleccionada}
 						>
 							<div style={{ minWidth: 180, fontFamily: 'sans-serif', fontSize: '0.85rem' }}>
 								<p style={{ margin: '0 0 0.3rem', color: '#dc2626', fontWeight: 700 }}>Alerta Activa</p>
-								<p style={{ margin: '0.2rem 0' }}><strong>ID:</strong> {alertaSeleccionada.id}</p>
-								<p style={{ margin: '0.2rem 0' }}><strong>Motivo:</strong> {alertaSeleccionada.motivo}</p>
-								{alertaSeleccionada.nombreZona && (
-									<p style={{ margin: '0.2rem 0' }}><strong>Zona:</strong> {alertaSeleccionada.nombreZona}</p>
+								<p style={{ margin: '0.2rem 0' }}><strong>ID:</strong> {alertaActiva.id}</p>
+								<p style={{ margin: '0.2rem 0' }}><strong>Motivo:</strong> {alertaActiva.motivo}</p>
+								{alertaActiva.nombreZona && (
+									<p style={{ margin: '0.2rem 0' }}><strong>Zona:</strong> {alertaActiva.nombreZona}</p>
 								)}
-								{alertaSeleccionada.emailUsuario && (
-									<p style={{ margin: '0.2rem 0' }}><strong>Usuario:</strong> {alertaSeleccionada.emailUsuario}</p>
+								{alertaActiva.emailUsuario && (
+									<p style={{ margin: '0.2rem 0' }}><strong>Usuario:</strong> {alertaActiva.emailUsuario}</p>
 								)}
 								<p style={{ margin: '0.3rem 0 0', color: '#dc2626', fontWeight: 600 }}>
-									Estado: {alertaSeleccionada.estado || 'Activo'}
+									Estado: {alertaActiva.estado || 'Activo'}
 								</p>
+								{typeof renderAlertaDetalle === 'function' && renderAlertaDetalle(alertaActiva)}
 							</div>
 						</InfoWindow>
 					)}
