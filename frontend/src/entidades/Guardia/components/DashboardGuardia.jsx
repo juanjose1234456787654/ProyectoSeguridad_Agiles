@@ -1,20 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import guardiaService from '../services/guardiaService';
-import AlertasUsuario from './AlertasUsuario';
+import '../styles/DashboardGuardia.css';
+
+const esAsignadaAlGuardia = (alerta, idGuardia) => {
+	if (!alerta || !idGuardia) return false;
+	return String(alerta.idGuardiaAsignado || '').trim().toUpperCase() === String(idGuardia).trim().toUpperCase();
+};
 
 const DashboardGuardia = () => {
 	const { user, logout } = useAuth();
+	const navigate = useNavigate();
+	const location = useLocation();
 	const [alertas, setAlertas] = useState([]);
 	const [loadingAlertas, setLoadingAlertas] = useState(true);
 	const [errorAlertas, setErrorAlertas] = useState('');
 	const [avisoTiempoReal, setAvisoTiempoReal] = useState('');
-	const [sidebarAbierto, setSidebarAbierto] = useState(true);
 
 	const [idEstado, setIdEstado] = useState(null);
 	const [enServicio, setEnServicio] = useState(false);
 	const [guardandoEstado, setGuardandoEstado] = useState(false);
+	const [avisoEstado, setAvisoEstado] = useState('');
 
 	const idUsuarioGuardia = user?.id;
 
@@ -27,8 +34,13 @@ const DashboardGuardia = () => {
 			const data = await guardiaService.getIncidentesActivos();
 			setAlertas(Array.isArray(data) ? data : []);
 		} catch (error) {
-			const message = error?.response?.data?.message || 'No se pudo cargar alertas activas';
-			setErrorAlertas(message);
+			const message = String(error?.response?.data?.message || '').trim();
+			if (message.toLowerCase().includes('no hay alerta')) {
+				setAlertas([]);
+				setErrorAlertas('');
+			} else {
+				setErrorAlertas(message || 'No se pudo cargar alertas activas');
+			}
 		} finally {
 			setLoadingAlertas(false);
 		}
@@ -44,7 +56,8 @@ const DashboardGuardia = () => {
 			if (actual) {
 				setIdEstado(actual.id);
 				const valor = String(actual.estado || '').toLowerCase();
-				setEnServicio(valor.includes('en servicio') || valor === 'check');
+				const esNoServicio = valor.includes('no en servicio') || valor.startsWith('no ');
+				setEnServicio(!esNoServicio && (valor === 'en servicio' || valor === 'check' || valor === 'activo' || valor === 'true'));
 			}
 		} catch {
 			// Si falla, mantenemos estado local en false y permitimos reintento al guardar.
@@ -108,22 +121,28 @@ const DashboardGuardia = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [idUsuarioGuardia]);
 
-	const onToggleServicio = async () => {
+	const onCambiarServicio = async (nuevoValor) => {
 		if (!idUsuarioGuardia || guardandoEstado) return;
 
+		setAvisoEstado('');
 		try {
 			setGuardandoEstado(true);
-			const siguiente = !enServicio;
 			const response = await guardiaService.setEstadoGuardia({
 				idEstado,
-				enServicio: siguiente,
+				enServicio: nuevoValor,
 				idUsuario: idUsuarioGuardia
 			});
 
-			setEnServicio(siguiente);
+			setEnServicio(nuevoValor);
 			if (!idEstado && response?.id) {
 				setIdEstado(response.id);
 			}
+			const etiqueta = nuevoValor ? 'En Servicio' : 'No en Servicio';
+			setAvisoEstado(`Estado guardado: ${etiqueta}`);
+			setTimeout(() => setAvisoEstado(''), 4000);
+		} catch (e) {
+			const msg = e?.response?.data?.message || e?.message || 'Error al guardar el estado';
+			setAvisoEstado(msg);
 		} finally {
 			setGuardandoEstado(false);
 		}
@@ -136,178 +155,118 @@ const DashboardGuardia = () => {
 		[alertas]
 	);
 
+	const seleccionarAlerta = (idAlerta) => {
+		navigate(`/guardia/mapa/${idAlerta}`, { state: { from: 'alertas' } });
+	};
+
+	const fromMapa = location.state?.from === 'mapa';
+
 	return (
-		<div style={{ display: 'flex', minHeight: '100vh', background: '#f5f5f5' }}>
-			{/* SIDEBAR IZQUIERDO - ALERTAS */}
-			<aside
-				style={{
-					width: sidebarAbierto ? '380px' : '0',
-					background: '#fff',
-					borderRight: '1px solid #ddd',
-					overflow: 'hidden',
-					transition: 'width 0.3s ease',
-					display: 'flex',
-					flexDirection: 'column'
-				}}
-			>
-				<div
-					style={{
-						padding: '1.2rem',
-						borderBottom: '1px solid #ddd',
-						display: 'flex',
-						justifyContent: 'space-between',
-						alignItems: 'center'
-					}}
-				>
-						<div>
-							<h2 style={{ margin: 0, fontSize: '1.1rem', color: '#21335b' }}>
-								Alertas de Usuarios
-							</h2>
-						</div>
-					<button
-						onClick={() => setSidebarAbierto(false)}
-						style={{
-							background: 'none',
-							border: 'none',
-							fontSize: '1.5rem',
-							cursor: 'pointer',
-							color: '#666',
-							padding: 0,
-							width: '32px',
-							height: '32px',
-							display: 'flex',
-							alignItems: 'center',
-							justifyContent: 'center'
-						}}
-					>
-						×
-					</button>
-				</div>
-
-				<div style={{ padding: '1rem', overflow: 'auto', flex: 1 }}>
-					{loadingAlertas && <p style={{ textAlign: 'center', color: '#999' }}>Cargando...</p>}
-					{errorAlertas && <p style={{ color: '#b91c1c', fontSize: '0.9rem' }}>{errorAlertas}</p>}
-
-					{!loadingAlertas && resumen.activas === 0 && (
-						<p style={{ textAlign: 'center', color: '#999', fontSize: '0.9rem' }}>
-							No hay alertas activas
+		<div className={`dg-shell dg-screen-enter ${fromMapa ? 'dg-screen-enter--from-left' : 'dg-screen-enter--from-right'}`}>
+			<section className="dg-unified-card">
+				<header className="dg-unified-card__header">
+					<div>
+						<h1 className="dg-main__title">Panel de Guardia · Alertas de Usuario</h1>
+						<p className="dg-alertas-main-panel__desc">
+							Seleccione una alerta para abrir el mapa. Todo se gestiona desde este mismo contenedor.
 						</p>
-					)}
-
-					{resumen.lista.map((alerta) => (
-						<div
-							key={alerta.id}
-							style={{
-								border: '1px solid #e0e0e0',
-								borderRadius: '8px',
-								padding: '0.9rem',
-								marginBottom: '0.75rem',
-								background: '#fafafa',
-								cursor: 'pointer',
-								transition: 'all 0.2s',
-								':hover': { background: '#f0f0f0' }
-							}}
-							onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-							onMouseLeave={(e) => (e.currentTarget.style.background = '#fafafa')}
-						>
-							<h4 style={{ margin: '0 0 0.5rem 0', color: '#21335b', fontSize: '0.95rem' }}>
-								{alerta.id}
-							</h4>
-							<p style={{ margin: '0.3rem 0', fontSize: '0.85rem', color: '#555' }}>
-								<strong>Motivo:</strong> {alerta.motivo}
-							</p>
-							<p style={{ margin: '0.3rem 0', fontSize: '0.85rem', color: '#555' }}>
-								<strong>Reportó:</strong> {alerta.emailUsuario || alerta.idUsuario || 'Sin dato'}
-							</p>
-							<Link to={`/guardia/cerrar/${alerta.id}`} style={{ textDecoration: 'none' }}>
-								<button
-									style={{
-										width: '100%',
-										marginTop: '0.6rem',
-										padding: '0.45rem',
-										background: '#21335b',
-										color: '#fff',
-										border: 'none',
-										borderRadius: '6px',
-										cursor: 'pointer',
-										fontSize: '0.85rem',
-										fontWeight: '600'
-									}}
-								>
-									Cerrar
-								</button>
-							</Link>
-						</div>
-					))}
-				</div>
-
-				<div style={{ padding: '1rem', borderTop: '1px solid #ddd', textAlign: 'center', fontSize: '0.85rem', color: '#999' }}>
-						<div style={{ fontWeight: 'bold', color: '#21335b', marginBottom: '0.3rem' }}>
-							Incidentes activos en BD: {resumen.activas}
-						</div>
-				</div>
-			</aside>
-
-			{/* CONTENIDO PRINCIPAL */}
-			<main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-				{/* HEADER CON CONTROLES */}
-				<div style={{ background: '#fff', borderBottom: '1px solid #ddd', padding: '1rem 1.5rem', position: 'sticky', top: 0, zIndex: 100 }}>
-					<header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-						<div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-							{!sidebarAbierto && (
-								<button
-									onClick={() => setSidebarAbierto(true)}
-									style={{
-										background: '#21335b',
-										color: '#fff',
-										border: 'none',
-										borderRadius: '6px',
-										padding: '0.6rem 1rem',
-										cursor: 'pointer',
-										fontWeight: '600',
-										fontSize: '0.9rem'
-									}}
-								>
-									Incidentes Activos
-								</button>
-							)}
-							<h1 style={{ margin: 0, fontSize: '1.3rem' }}>Panel de Guardia</h1>
-						</div>
-						<div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-							<label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', cursor: 'pointer' }}>
-								<input type="checkbox" checked={enServicio} onChange={onToggleServicio} disabled={guardandoEstado} />
-								<span style={{ fontSize: '0.9rem' }}>
-									{guardandoEstado ? 'Guardando...' : enServicio ? 'En Servicio' : 'No en Servicio'}
-								</span>
+					</div>
+					<div className="dg-main__header-right">
+						<div className="dg-main__service-toggle">
+							<label className="dg-main__service-option">
+								<input
+									type="radio"
+									name="estadoServicio"
+									value="en"
+									checked={enServicio}
+									onChange={() => onCambiarServicio(true)}
+									disabled={guardandoEstado}
+								/>
+								{guardandoEstado && enServicio ? 'Guardando...' : 'En Servicio'}
 							</label>
-							<button onClick={logout} style={{ padding: '0.6rem 1rem', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-								Salir
-							</button>
+							<label className="dg-main__service-option">
+								<input
+									type="radio"
+									name="estadoServicio"
+									value="no"
+									checked={!enServicio}
+									onChange={() => onCambiarServicio(false)}
+									disabled={guardandoEstado}
+								/>
+								{guardandoEstado && !enServicio ? 'Guardando...' : 'No en Servicio'}
+							</label>
 						</div>
-					</header>
-				</div>
+						<button onClick={logout} className="dg-main__logout">Salir</button>
+					</div>
+				</header>
 
-				{/* NOTIFICACIÓN EN TIEMPO REAL */}
+				{avisoEstado && (
+					<div className={`dg-main__estado ${avisoEstado.toLowerCase().startsWith('error') ? 'dg-main__estado--error' : 'dg-main__estado--ok'}`}>
+						{avisoEstado}
+					</div>
+				)}
+
 				{avisoTiempoReal && (
-					<div
-						style={{
-							padding: '0.8rem 1.5rem',
-							borderBottom: '2px solid #fde68a',
-							background: '#fffbeb',
-							color: '#92400e',
-							fontWeight: 700,
-							fontSize: '0.95rem'
-						}}
-					>
+					<div className="dg-main__tiempo-real">
 						{avisoTiempoReal}
 					</div>
 				)}
 
-				{/* ALERTAS USUARIO COMPONENT */}
-				<div style={{ flex: 1, overflow: 'auto', padding: '1.5rem' }}>
-					<AlertasUsuario />
+				<div className="dg-unified-card__body">
+					<p className="dg-alertas-main-panel__count">
+						Alertas activas: <strong>{resumen.activas}</strong>
+					</p>
+
+					{loadingAlertas && <p className="dg-sidebar__empty">Cargando alertas...</p>}
+					{errorAlertas && <p className="dg-sidebar__error">{errorAlertas}</p>}
+
+					{!loadingAlertas && resumen.activas === 0 && (
+						<p className="dg-sidebar__empty">No hay alertas activas</p>
+					)}
+
+					<div className="dg-unified-card__list">
+						{resumen.lista.map((alerta) => (
+							<div
+								key={alerta.id}
+								className="dg-alerta-card"
+								onClick={() => seleccionarAlerta(alerta.id)}
+								title="Seleccionar alerta para ir al mapa"
+								style={{ position: 'relative' }}
+							>
+								{esAsignadaAlGuardia(alerta, idUsuarioGuardia) && (
+									<span style={{
+										position: 'absolute',
+										top: '0.85rem',
+										right: '0.85rem',
+										padding: '0.25rem 0.6rem',
+										borderRadius: '999px',
+										background: '#16a34a',
+										color: '#fff',
+										fontSize: '0.75rem',
+										fontWeight: 700,
+										textTransform: 'uppercase',
+										letterSpacing: '0.04em'
+									}}>
+										Asignado
+									</span>
+								)}
+								<h4 className="dg-alerta-card__id">{alerta.id}</h4>
+								<p className="dg-alerta-card__linea">
+									<strong>Motivo:</strong> {alerta.motivo}
+								</p>
+								<p className="dg-alerta-card__linea">
+									<strong>Reportó:</strong> {alerta.emailUsuario || alerta.idUsuario || 'Sin dato'}
+								</p>
+								<p className="dg-alerta-card__hint">Seleccione para abrir mapa</p>
+							</div>
+						))}
+					</div>
 				</div>
-			</main>
+
+				<footer className="dg-sidebar__foot">
+					<div className="dg-sidebar__foot-count">Incidentes activos en BD: {resumen.activas}</div>
+				</footer>
+			</section>
 		</div>
 	);
 };

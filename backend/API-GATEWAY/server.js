@@ -8,7 +8,8 @@ const {
   incidentesProxy,
   incidentesSocketProxy,
   seguridadProxy,
-  estadisticasProxy
+  estadisticasProxy,
+  contactosProxy
 } = require('./config/proxies');
 
 const app = express();
@@ -41,6 +42,9 @@ app.use('/api/seguridad', seguridadProxy);
 
 // MS-ESTADISTICAS → historial
 app.use('/api/estadisticas', estadisticasProxy);
+
+// MS-CONTACTOS  → contactos de confianza y envío de alertas
+app.use('/api/contactos', contactosProxy);
 
 // ─── Estado general del gateway ───────────────────────────────────────────────
 app.get('/api/gateway/health', (_req, res) => {

@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-google-maps/api": "^2.20.8",
     "axios": "^1.16.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.15.0",
+    "recharts": "^2.15.3",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {

@@ -59,13 +59,22 @@ const runSqlServerQuery = async (database, sql, params = []) => {
 
   const args = ['-S', instance, '-E', '-C', '-d', database, '-Q', wrappedQuery, '-y', '0'];
 
+  console.log(`[DB EXEC] ${database} | Q: ${query.slice(0, 120)}`);
+
   const { stdout, stderr } = await execFileAsync('sqlcmd', args, {
     windowsHide: true,
     maxBuffer: 1024 * 1024
   });
 
   if (stderr && stderr.trim()) {
+    console.error(`[DB EXEC] stderr: ${stderr.trim()}`);
     throw new Error(stderr.trim());
+  }
+
+  const rawAll = (stdout || '').replace(/\r\n/g, '\n').trim();
+  if (rawAll && /Msg\s+\d+/i.test(rawAll)) {
+    console.error(`[DB EXEC] SQL error stdout: ${rawAll.slice(0, 300)}`);
+    throw new Error(`SQL Server error: ${rawAll.split('\n')[0]}`);
   }
 
   if (!isSelect) {

@@ -164,7 +164,109 @@ const Usuario = {
     }
   },
 
-  ensureIdentityUserFromUta
+  ensureIdentityUserFromUta,
+
+  // ── Gestión de usuarios (Administrador) ────────────────────────────────────
+
+  /** Devuelve todos los usuarios de BD_IDENTIDAD enriquecidos con nombre de BD_UTA y contactos */
+  findAll: async () => {
+    const utaDb = process.env.DB_UTA_NAME || 'BD_UTA';
+    let rows = [];
+
+    // Intento 1: con JOIN cross-database a BD_UTA para obtener nombres
+    try {
+      [rows] = await identidadDb.query(
+        `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, u.ID_ROL_PER AS rolCodigo, r.NOM_ROL AS rolNombre, RTRIM(ISNULL(p.NOM1_PER,'') + ' ' + ISNULL(p.NOM2_PER,'') + ' ' + ISNULL(p.APE1_PER,'') + ' ' + ISNULL(p.APE2_PER,'')) AS nombre FROM USUARIOS u LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER LEFT JOIN ${utaDb}.dbo.PERSONAS_UTA p ON p.COR_PER = u.COR_INS_REF_USU ORDER BY u.ID_USU`
+      );
+      console.log(`[findAll] Con nombres, rows: ${rows?.length}`);
+    } catch (e) {
+      console.warn(`[findAll] JOIN BD_UTA falló (${e.message.slice(0,200)}), reintentando sin nombres...`);
+      try {
+        [rows] = await identidadDb.query(
+          `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, u.ID_ROL_PER AS rolCodigo, r.NOM_ROL AS rolNombre FROM USUARIOS u LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER ORDER BY u.ID_USU`
+        );
+        console.log(`[findAll] Sin nombres, rows: ${rows?.length}`);
+        rows = rows.map(r => ({ ...r, nombre: '' }));
+      } catch (e2) {
+        console.error(`[findAll] Fallback también falló: ${e2.message}`);
+        throw e2;
+      }
+    }
+
+    // Para cada usuario, obtener contactos y grupos de confianza
+    const resultado = await Promise.all(rows.map(async (row) => {
+      let contactos = [];
+      let grupos = [];
+      try {
+        const [cRows] = await identidadDb.query(
+          `SELECT ID_CON AS id, COR_PER_REF AS email, ALIAS_CON AS alias FROM CONTACTOS_CONFIANZA WHERE ID_USU_DUEÑO = ?`,
+          [row.id]
+        );
+        contactos = cRows || [];
+      } catch { /* sin contactos */ }
+      try {
+        const [gRows] = await identidadDb.query(
+          `SELECT ID_GRU AS id, NOM_GRU AS nombre FROM GRUPOS_CONFIANZA WHERE ID_USU_DUEÑO = ?`,
+          [row.id]
+        );
+        grupos = gRows || [];
+      } catch { /* sin grupos */ }
+
+      return {
+        id: row.id,
+        email: row.email,
+        rolCodigo: row.rolCodigo,
+        rol: USER_FACING_ROLE_BY_NAME[row.rolNombre] || row.rolNombre || 'Desconocido',
+        nombre: (row.nombre || '').trim(),
+        bloqueado: false,
+        contactos,
+        grupos
+      };
+    }));
+
+    return resultado;
+  },
+
+  /** Elimina un usuario por ID */
+  deleteById: async (id) => {
+    // Primero eliminar registros dependientes (contactos y grupos)
+    try {
+      await identidadDb.query(`DELETE FROM INTEGRANTES_GRUPO WHERE ID_GRU_REF IN (SELECT ID_GRU FROM GRUPOS_CONFIANZA WHERE ID_USU_DUEÑO = ?)`, [id]);
+      await identidadDb.query(`DELETE FROM GRUPOS_CONFIANZA WHERE ID_USU_DUEÑO = ?`, [id]);
+      await identidadDb.query(`DELETE FROM CONTACTOS_CONFIANZA WHERE ID_USU_DUEÑO = ?`, [id]);
+    } catch (e) {
+      console.warn(`[deleteById] No se pudieron limpiar dependencias: ${e.message}`);
+    }
+    await identidadDb.query(`DELETE FROM USUARIOS WHERE ID_USU = ?`, [id]);
+    return true;
+  },
+
+  /** Actualiza email y/o rol de un usuario */
+  update: async (id, { email, rolCodigo }) => {
+    const fields = [];
+    const params = [];
+    if (email)     { fields.push('COR_INS_REF_USU = ?'); params.push(email); }
+    if (rolCodigo) { fields.push('ID_ROL_PER = ?');       params.push(rolCodigo); }
+    if (fields.length === 0) return null;
+    params.push(id);
+    await identidadDb.query(`UPDATE USUARIOS SET ${fields.join(', ')} WHERE ID_USU = ?`, params);
+    const [rows] = await identidadDb.query(
+      `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, r.NOM_ROL AS rol
+       FROM USUARIOS u LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER WHERE u.ID_USU = ?`, [id]
+    );
+    return rows[0] || null;
+  },
+
+  /** Bloquea o desbloquea un usuario (campo BLOQUEADO BIT en USUARIOS) */
+  setBloqueado: async (id, bloqueado) => {
+    try {
+      await identidadDb.query('UPDATE USUARIOS SET BLOQUEADO = ? WHERE ID_USU = ?', [bloqueado ? 1 : 0, id]);
+      return { id, bloqueado };
+    } catch (e) {
+      // Si la columna no existe, informa al llamador
+      throw new Error('CAMPO_BLOQUEADO_NO_EXISTE');
+    }
+  }
 };
 
 module.exports = Usuario;

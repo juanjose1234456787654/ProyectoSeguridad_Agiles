@@ -2,6 +2,49 @@ const { getDb } = require('../config/db');
 
 const db = getDb('incidentes');
 
+// Añadir columna FEC_INI_INC a INCIDENTES si no existe (para registrar fecha/hora de la alerta)
+const ensureFechaInicioColumn = async () => {
+  try {
+    await db.query(
+      `IF NOT EXISTS (
+         SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_NAME = 'INCIDENTES'
+           AND COLUMN_NAME = 'FEC_INI_INC'
+       )
+       ALTER TABLE INCIDENTES ADD FEC_INI_INC DATETIME NULL`
+    );
+  } catch (e) {
+    console.warn('[Incidente] No se pudo añadir FEC_INI_INC:', e.message);
+  }
+};
+ensureFechaInicioColumn();
+
+// Añadir columnas de coordenadas si no existen (ubicación exacta de la alerta)
+const ensureUbicacionColumns = async () => {
+  try {
+    await db.query(
+      `IF NOT EXISTS (
+         SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_NAME = 'INCIDENTES'
+           AND COLUMN_NAME = 'LAT_INC'
+       )
+       ALTER TABLE INCIDENTES ADD LAT_INC FLOAT NULL`
+    );
+
+    await db.query(
+      `IF NOT EXISTS (
+         SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_NAME = 'INCIDENTES'
+           AND COLUMN_NAME = 'LNG_INC'
+       )
+       ALTER TABLE INCIDENTES ADD LNG_INC FLOAT NULL`
+    );
+  } catch (e) {
+    console.warn('[Incidente] No se pudieron añadir columnas LAT_INC/LNG_INC:', e.message);
+  }
+};
+ensureUbicacionColumns();
+
 const getNextIncidenteId = async () => {
   const [rows] = await db.query(
     `SELECT
@@ -60,6 +103,8 @@ const Incidente = {
           i.MOT_INC     AS motivo,
           i.EST_INC     AS estado,
           i.ID_ZON_PER  AS idZona,
+          i.LAT_INC     AS lat,
+          i.LNG_INC     AS lng,
           z.NOM_ZON     AS nombreZona,
           i.ID_USU_REF  AS idUsuario,
           u.COR_INS_REF_USU AS emailUsuario,
@@ -83,6 +128,8 @@ const Incidente = {
           i.MOT_INC     AS motivo,
           i.EST_INC     AS estado,
           i.ID_ZON_PER  AS idZona,
+          i.LAT_INC     AS lat,
+          i.LNG_INC     AS lng,
           z.NOM_ZON     AS nombreZona,
           i.ID_USU_REF  AS idUsuario
         FROM INCIDENTES i
@@ -102,9 +149,13 @@ const Incidente = {
           i.MOT_INC     AS motivo,
           i.EST_INC     AS estado,
           i.ID_ZON_PER  AS idZona,
+          i.LAT_INC     AS lat,
+          i.LNG_INC     AS lng,
           z.NOM_ZON     AS nombreZona,
           i.ID_USU_REF  AS idUsuario,
           u.COR_INS_REF_USU AS emailUsuario,
+          asi.ID_EST_PER AS idEstadoGuardia,
+          eg.ID_USU_REF  AS idGuardiaAsignado,
           LTRIM(RTRIM(CONCAT(
             COALESCE(p.NOM1_PER, ''), ' ',
             COALESCE(p.NOM2_PER, ''), ' ',
@@ -115,6 +166,13 @@ const Incidente = {
         LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
         LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
         LEFT JOIN [BD_UTA].dbo.PERSONAS_UTA p ON p.COR_PER = u.COR_INS_REF_USU
+        OUTER APPLY (
+          SELECT TOP 1 a.ID_EST_PER
+          FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+          WHERE a.ID_INC_PER = i.ID_INC
+          ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC
+        ) asi
+        LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = asi.ID_EST_PER
         WHERE i.ID_INC = ?`,
         [id]
       );
@@ -126,10 +184,21 @@ const Incidente = {
           i.MOT_INC     AS motivo,
           i.EST_INC     AS estado,
           i.ID_ZON_PER  AS idZona,
+          i.LAT_INC     AS lat,
+          i.LNG_INC     AS lng,
           z.NOM_ZON     AS nombreZona,
-          i.ID_USU_REF  AS idUsuario
+          i.ID_USU_REF  AS idUsuario,
+          asi.ID_EST_PER AS idEstadoGuardia,
+          eg.ID_USU_REF  AS idGuardiaAsignado
         FROM INCIDENTES i
         LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+        OUTER APPLY (
+          SELECT TOP 1 a.ID_EST_PER
+          FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+          WHERE a.ID_INC_PER = i.ID_INC
+          ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC
+        ) asi
+        LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = asi.ID_EST_PER
         WHERE i.ID_INC = ?`,
         [id]
       );
@@ -137,24 +206,102 @@ const Incidente = {
     }
   },
 
-  findActivos: async () => {
+  getAsignacionActualByIncidente: async (idIncidente) => {
     const [rows] = await db.query(
-      `SELECT
-        i.ID_INC      AS id,
-        i.MOT_INC     AS motivo,
-        i.EST_INC     AS estado,
-        i.ID_ZON_PER  AS idZona,
-        z.NOM_ZON     AS nombreZona,
-        i.ID_USU_REF  AS idUsuario,
-        u.COR_INS_REF_USU AS emailUsuario,
-        i.ACCIONES_INC AS acciones
-      FROM INCIDENTES i
-      LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
-      LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
-      WHERE i.EST_INC = 'Activo'
-      ORDER BY i.ID_INC`
+      `SELECT TOP 1
+        a.ID_ASI    AS idAsignacion,
+        a.ID_INC_PER AS idIncidente,
+        a.ID_EST_PER AS idEstadoGuardia,
+        eg.ID_USU_REF AS idGuardiaAsignado
+      FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+      LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = a.ID_EST_PER
+      WHERE a.ID_INC_PER = ?
+      ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC`,
+      [idIncidente]
     );
-    return rows;
+
+    return rows[0] || null;
+  },
+
+  findActivos: async () => {
+    try {
+      const [rows] = await db.query(
+        `SELECT
+          i.ID_INC      AS id,
+          i.MOT_INC     AS motivo,
+          i.EST_INC     AS estado,
+          i.ID_ZON_PER  AS idZona,
+          i.LAT_INC     AS lat,
+          i.LNG_INC     AS lng,
+          z.NOM_ZON     AS nombreZona,
+          i.ID_USU_REF  AS idUsuario,
+          u.COR_INS_REF_USU AS emailUsuario,
+          asi.ID_EST_PER AS idEstadoGuardia,
+          eg.ID_USU_REF   AS idGuardiaAsignado,
+          i.ACCIONES_INC AS acciones
+        FROM INCIDENTES i
+        LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+        LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+        OUTER APPLY (
+          SELECT TOP 1 a.ID_EST_PER
+          FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+          WHERE a.ID_INC_PER = i.ID_INC
+          ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC
+        ) asi
+        LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = asi.ID_EST_PER
+        WHERE i.EST_INC = 'Activo'
+        ORDER BY i.ID_INC`
+      );
+      return rows;
+    } catch {
+      try {
+        // Fallback cuando columnas opcionales o JOINs externos no existen.
+        const [rows] = await db.query(
+          `SELECT
+            i.ID_INC      AS id,
+            i.MOT_INC     AS motivo,
+            i.EST_INC     AS estado,
+            i.ID_ZON_PER  AS idZona,
+            i.LAT_INC     AS lat,
+            i.LNG_INC     AS lng,
+            z.NOM_ZON     AS nombreZona,
+            i.ID_USU_REF  AS idUsuario,
+            u.COR_INS_REF_USU AS emailUsuario,
+            asi.ID_EST_PER AS idEstadoGuardia,
+            eg.ID_USU_REF   AS idGuardiaAsignado
+          FROM INCIDENTES i
+          LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+          LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+          OUTER APPLY (
+            SELECT TOP 1 a.ID_EST_PER
+            FROM [BD_SEGURIDAD].dbo.ASIGNACION_ALERTAS a
+            WHERE a.ID_INC_PER = i.ID_INC
+            ORDER BY TRY_CAST(SUBSTRING(a.ID_ASI, 5, LEN(a.ID_ASI) - 4) AS INT) DESC, a.ID_ASI DESC
+          ) asi
+          LEFT JOIN [BD_SEGURIDAD].dbo.ESTADO_GUARDIAS eg ON eg.ID_EST = asi.ID_EST_PER
+          WHERE i.EST_INC = 'Activo'
+          ORDER BY i.ID_INC`
+        );
+        return rows;
+      } catch {
+        const [rows] = await db.query(
+          `SELECT
+            i.ID_INC      AS id,
+            i.MOT_INC     AS motivo,
+            i.EST_INC     AS estado,
+            i.ID_ZON_PER  AS idZona,
+            i.LAT_INC     AS lat,
+            i.LNG_INC     AS lng,
+            z.NOM_ZON     AS nombreZona,
+            i.ID_USU_REF  AS idUsuario
+          FROM INCIDENTES i
+          LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+          WHERE i.EST_INC = 'Activo'
+          ORDER BY i.ID_INC`
+        );
+        return rows;
+      }
+    }
   },
 
   findByUsuario: async (idUsuario) => {
@@ -169,6 +316,8 @@ const Incidente = {
         i.MOT_INC     AS motivo,
         i.EST_INC     AS estado,
         i.ID_ZON_PER  AS idZona,
+        i.LAT_INC     AS lat,
+        i.LNG_INC     AS lng,
         z.NOM_ZON     AS nombreZona,
         i.ID_USU_REF  AS idUsuario,
         u.COR_INS_REF_USU AS emailUsuario,
@@ -197,23 +346,41 @@ const Incidente = {
     return rows[0]?.idAsignacion || null;
   },
 
-  saveHistorialCierre: async ({ idIncidente, acciones }) => {
-    const idAsignacion = await Incidente.getAsignacionIdByIncidente(idIncidente);
-    if (!idAsignacion) {
-      return { saved: false, reason: 'missing-asignacion' };
+  saveHistorialCierre: async ({ idIncidente, acciones, idGuardia }) => {
+    console.log(`[saveHistorialCierre] Iniciando para incidente=${idIncidente}, guardia=${idGuardia}`);
+
+    // idAsignacion puede ser null si el guardia cerró sin haber sido asignado formalmente
+    let idAsignacion = null;
+    try {
+      idAsignacion = await Incidente.getAsignacionIdByIncidente(idIncidente);
+      console.log(`[saveHistorialCierre] idAsignacion encontrado: ${idAsignacion}`);
+    } catch (e) {
+      console.warn(`[saveHistorialCierre] Error buscando asignacion: ${e.message}`);
     }
 
-    const idHistorial = await getNextHistorialId();
+    let idHistorial;
+    try {
+      idHistorial = await getNextHistorialId();
+      console.log(`[saveHistorialCierre] idHistorial generado: ${idHistorial}`);
+    } catch (e) {
+      console.error(`[saveHistorialCierre] Error generando ID historial: ${e.message}`);
+      throw e;
+    }
+
     const fechaInicio = await getFechaInicioIncidente(idIncidente);
     const fechaCierre = toSqlDateTime(new Date());
-    const resultadoGuardia = `Acciones Realizadas: ${String(acciones || 'Sin detalle').trim()}`;
+    const resultadoGuardia = idGuardia ? String(idGuardia).trim() : null;
+    const datosJsonValue = acciones ? JSON.stringify({ acciones }) : null;
+
+    console.log(`[saveHistorialCierre] Insertando: id=${idHistorial} ini=${fechaInicio} cie=${fechaCierre} gua=${resultadoGuardia} asi=${idAsignacion}`);
 
     await db.query(
       `INSERT INTO [BD_ESTADISTICAS].dbo.HISTORIAL
         (ID_HIS, FEC_INI_HIS, FEC_CIE_HIS, RES_GUA_HIS, ID_ASI_REF, DATOS_JSON)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [idHistorial, fechaInicio, fechaCierre, resultadoGuardia, idAsignacion, null]
-    );
+      [idHistorial, fechaInicio, fechaCierre, resultadoGuardia, idAsignacion, datosJsonValue]);
+
+    console.log(`[saveHistorialCierre] INSERT exitoso: ${idHistorial}`);
 
     return {
       saved: true,
@@ -224,15 +391,29 @@ const Incidente = {
     };
   },
 
-  // Crear un nuevo incidente
-  create: async ({ motivo, estado = 'Activo', idZona, idUsuario }) => {
+  // Crear un nuevo incidente (guarda FEC_INI_INC para uso en HISTORIAL)
+  create: async ({ motivo, estado = 'Activo', idZona, idUsuario, lat = null, lng = null }) => {
     const id = await getNextIncidenteId();
-    await db.query(
-      `INSERT INTO INCIDENTES (ID_INC, MOT_INC, EST_INC, ID_ZON_PER, ID_USU_REF)
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, motivo, estado, idZona, idUsuario]
-    );
-    return { id, motivo, estado, idZona, idUsuario };
+    const fechaInicio = toSqlDateTime(new Date());
+    const latNum = Number(lat);
+    const lngNum = Number(lng);
+    const latSafe = Number.isFinite(latNum) ? latNum : null;
+    const lngSafe = Number.isFinite(lngNum) ? lngNum : null;
+    try {
+      await db.query(
+        `INSERT INTO INCIDENTES (ID_INC, MOT_INC, EST_INC, ID_ZON_PER, ID_USU_REF, FEC_INI_INC, LAT_INC, LNG_INC)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, motivo, estado, idZona, idUsuario, fechaInicio, latSafe, lngSafe]
+      );
+    } catch {
+      // Fallback: columna FEC_INI_INC aún no existe
+      await db.query(
+        `INSERT INTO INCIDENTES (ID_INC, MOT_INC, EST_INC, ID_ZON_PER, ID_USU_REF)
+         VALUES (?, ?, ?, ?, ?)`,
+        [id, motivo, estado, idZona, idUsuario]
+      );
+    }
+    return { id, motivo, estado, idZona, idUsuario, lat: latSafe, lng: lngSafe };
   },
 
   // Actualizar un incidente
@@ -260,6 +441,64 @@ const Incidente = {
       [acciones, id]
     );
     return Incidente.findById(id);
+  },
+
+  // Estadísticas para Administrador (T5.1 / T5.2)
+  getEstadisticas: async () => {
+    // Totales generales
+    const [totalesRows] = await db.query(
+      `SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN EST_INC = 'Cerrado' THEN 1 ELSE 0 END) AS cerradas,
+        SUM(CASE WHEN EST_INC = 'Activo'  THEN 1 ELSE 0 END) AS activas
+       FROM INCIDENTES`
+    );
+
+    // Agrupado por motivo (todos los incidentes)
+    const [porMotivoRows] = await db.query(
+      `SELECT MOT_INC AS motivo, COUNT(*) AS cantidad
+       FROM INCIDENTES
+       GROUP BY MOT_INC
+       ORDER BY cantidad DESC`
+    );
+
+    // Agrupado por zona (todos los incidentes)
+    const [porZonaRows] = await db.query(
+      `SELECT
+        COALESCE(z.NOM_ZON, 'Sin zona') AS zona,
+        COUNT(*) AS cantidad
+       FROM INCIDENTES i
+       LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+       GROUP BY z.NOM_ZON
+       ORDER BY cantidad DESC`
+    );
+
+    // Últimas 10 alertas cerradas con detalle
+    const [cerradasRows] = await db.query(
+      `SELECT TOP 10
+        i.ID_INC         AS id,
+        i.MOT_INC        AS motivo,
+        i.ACCIONES_INC   AS acciones,
+        i.ID_ZON_PER     AS idZona,
+        COALESCE(z.NOM_ZON, 'Sin zona') AS nombreZona,
+        u.COR_INS_REF_USU AS emailUsuario
+       FROM INCIDENTES i
+       LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+       LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
+       WHERE i.EST_INC = 'Cerrado'
+       ORDER BY i.ID_INC DESC`
+    );
+
+    const { total, cerradas, activas } = totalesRows[0] || { total: 0, cerradas: 0, activas: 0 };
+
+    return {
+      total: Number(total) || 0,
+      cerradas: Number(cerradas) || 0,
+      activas: Number(activas) || 0,
+      porMotivo: porMotivoRows.map(r => ({ motivo: r.motivo, cantidad: Number(r.cantidad) })),
+      porZona: porZonaRows.map(r => ({ zona: r.zona, cantidad: Number(r.cantidad) })),
+      ultimasCerradas: cerradasRows
+    };
   }
 };
 

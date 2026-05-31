@@ -46,6 +46,16 @@ const create = async (req, res) => {
     }
 
     const nueva = await AsignacionAlerta.create({ idIncidente, idEstadoGuardia });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('alerta:asignada', {
+        idAsignacion: nueva.id,
+        idIncidente: nueva.idIncidente,
+        idEstadoGuardia: nueva.idEstadoGuardia
+      });
+    }
+
     res.status(201).json(nueva);
   } catch (error) {
     console.error(error);
@@ -62,6 +72,16 @@ const remove = async (req, res) => {
     }
 
     await AsignacionAlerta.delete(req.params.id);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('alerta:desasignada', {
+        idAsignacion: req.params.id,
+        idIncidente: existente.idIncidente,
+        idEstadoGuardia: existente.idEstadoGuardia
+      });
+    }
+
     res.json({ message: 'Asignación eliminada correctamente' });
   } catch (error) {
     console.error(error);

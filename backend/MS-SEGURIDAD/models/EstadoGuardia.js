@@ -13,18 +13,71 @@ const getNextEstadoId = async () => {
 };
 
 const EstadoGuardia = {
-  // Obtener todos los estados de guardias
+  // Obtener todos los estados de guardias con nombre y casos asignados
   findAll: async () => {
-    const [rows] = await db.query(
-      `SELECT
-        ID_EST      AS id,
-        EST_EST     AS estado,
-        HOR_SER_EST AS horario,
-        ID_USU_REF  AS idUsuario
-      FROM ESTADO_GUARDIAS
-      ORDER BY ID_EST`
-    );
-    return rows;
+    try {
+      const [rows] = await db.query(
+        `WITH ultimos AS (
+          SELECT
+            e.ID_EST,
+            e.EST_EST,
+            e.HOR_SER_EST,
+            e.ID_USU_REF,
+            ROW_NUMBER() OVER (
+              PARTITION BY e.ID_USU_REF
+              ORDER BY TRY_CAST(SUBSTRING(e.ID_EST, 4, LEN(e.ID_EST) - 3) AS INT) DESC, e.ID_EST DESC
+            ) AS rn
+          FROM ESTADO_GUARDIAS e
+          WHERE UPPER(LTRIM(RTRIM(e.ID_USU_REF))) NOT IN ('U1', 'U2')
+        )
+        SELECT
+          e.ID_EST      AS id,
+          e.EST_EST     AS estado,
+          e.HOR_SER_EST AS horario,
+          e.ID_USU_REF  AS idUsuario,
+          u.COR_INS_REF_USU AS email,
+          LTRIM(RTRIM(CONCAT(
+            COALESCE(p.NOM1_PER, ''), ' ',
+            COALESCE(p.NOM2_PER, ''), ' ',
+            COALESCE(p.APE1_PER, ''), ' ',
+            COALESCE(p.APE2_PER, '')
+          ))) AS nombre,
+          (SELECT COUNT(*) FROM ASIGNACION_ALERTAS a WHERE a.ID_EST_PER = e.ID_EST) AS casosAsignados
+        FROM ultimos e
+        LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = e.ID_USU_REF
+        LEFT JOIN [BD_UTA].dbo.PERSONAS_UTA p ON p.COR_PER = u.COR_INS_REF_USU
+        WHERE e.rn = 1
+          AND UPPER(LTRIM(RTRIM(COALESCE(u.COR_INS_REF_USU, '')))) NOT LIKE '%PRUEBA FILTRO U1%'
+          AND UPPER(LTRIM(RTRIM(COALESCE(u.COR_INS_REF_USU, '')))) NOT LIKE '%PRUEBA FILTRO U2%'
+        ORDER BY e.EST_EST, e.ID_EST`
+      );
+      return rows;
+    } catch {
+      const [rows] = await db.query(
+        `WITH ultimos AS (
+          SELECT
+            ID_EST,
+            EST_EST,
+            HOR_SER_EST,
+            ID_USU_REF,
+            ROW_NUMBER() OVER (
+              PARTITION BY ID_USU_REF
+              ORDER BY TRY_CAST(SUBSTRING(ID_EST, 4, LEN(ID_EST) - 3) AS INT) DESC, ID_EST DESC
+            ) AS rn
+          FROM ESTADO_GUARDIAS
+          WHERE UPPER(LTRIM(RTRIM(ID_USU_REF))) NOT IN ('U1', 'U2')
+        )
+        SELECT
+          ID_EST      AS id,
+          EST_EST     AS estado,
+          HOR_SER_EST AS horario,
+          ID_USU_REF  AS idUsuario
+        FROM ultimos
+        WHERE rn = 1
+        ORDER BY ID_EST`
+      );
+      return rows;
+    }
   },
 
   // Obtener estado de guardia por ID
@@ -51,7 +104,8 @@ const EstadoGuardia = {
         HOR_SER_EST AS horario,
         ID_USU_REF  AS idUsuario
       FROM ESTADO_GUARDIAS
-      WHERE ID_USU_REF = ?`,
+      WHERE ID_USU_REF = ?
+      ORDER BY TRY_CAST(SUBSTRING(ID_EST, 4, LEN(ID_EST) - 3) AS INT) DESC, ID_EST DESC`,
       [idUsuario]
     );
     return rows;
@@ -60,23 +114,33 @@ const EstadoGuardia = {
   // Registrar estado de guardia
   create: async ({ estado, horario, idUsuario }) => {
     const id = await getNextEstadoId();
+    console.log(`[ESTADO_GUARDIAS model.create] INSERT id=${id} estado=${estado} horario=${horario} idUsuario=${idUsuario}`);
     await db.query(
       `INSERT INTO ESTADO_GUARDIAS (ID_EST, EST_EST, HOR_SER_EST, ID_USU_REF)
        VALUES (?, ?, ?, ?)`,
       [id, estado, horario, idUsuario]
     );
-    return { id, estado, horario, idUsuario };
+    // Verificar que el INSERT realmente persitió
+    const verificado = await EstadoGuardia.findById(id);
+    console.log('[ESTADO_GUARDIAS model.create] Verificacion post-INSERT:', verificado);
+    if (!verificado) {
+      throw new Error(`INSERT en ESTADO_GUARDIAS no persistió para ID ${id}. Verifica permisos y constraints en BD_SEGURIDAD.`);
+    }
+    return verificado;
   },
 
   // Actualizar estado de guardia
   update: async (id, { estado, horario, idUsuario }) => {
+    console.log(`[ESTADO_GUARDIAS model.update] UPDATE id=${id} estado=${estado}`);
     await db.query(
       `UPDATE ESTADO_GUARDIAS
        SET EST_EST = ?, HOR_SER_EST = ?, ID_USU_REF = ?
        WHERE ID_EST = ?`,
       [estado, horario, idUsuario, id]
     );
-    return EstadoGuardia.findById(id);
+    const verificado = await EstadoGuardia.findById(id);
+    console.log('[ESTADO_GUARDIAS model.update] Verificacion post-UPDATE:', verificado);
+    return verificado;
   },
 
   // Eliminar estado de guardia

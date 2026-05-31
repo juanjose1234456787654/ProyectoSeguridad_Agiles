@@ -71,11 +71,19 @@ const estadisticasProxy = createProxyMiddleware(
   }
 );
 
+const contactosProxy = createProxyMiddleware(
+  {
+    ...proxyOptions(process.env.MS_CONTACTOS_URL || 'http://localhost:4005'),
+    pathRewrite: (path) => `/api/contactos${path}`
+  }
+);
+
 module.exports = {
   identidadAuthProxy,
   identidadApiProxy,
   incidentesProxy,
   incidentesSocketProxy,
   seguridadProxy,
-  estadisticasProxy
+  estadisticasProxy,
+  contactosProxy
 };

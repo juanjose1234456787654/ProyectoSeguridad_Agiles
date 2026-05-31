@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import alertaService from '../services/alertaService';
-import mapImage from '../assets/map.png';
+import contactosService from '../services/contactosService';
+import notificacionesService from '../services/notificacionesService';
+import { NotificacionesContainer } from './NotificacionToast';
+import MapaCampus from './MapaCampus';
+import { ZONAS_CAMPUS } from './MapaCampus';
 import '../styles/AlertasUsuario.css';
+import '../styles/NotificacionToast.css';
 
 const ROLES_PERMITIDOS = ['Guardia', 'Estudiante', 'Docente', 'Personal'];
 const HOLD_DURATION_MS = 3000;
@@ -13,7 +18,53 @@ const AlertasUsuario = () => {
 	const [motivo, setMotivo] = useState('Robo');
 	const [estado, setEstado] = useState('Inactivo');
 	const [ultimaAlerta, setUltimaAlerta] = useState(null);
+
+	// Estado de notificaciones push/sonoras (HU-4)
+	const [toasts, setToasts] = useState([]);
+	const [permisoNotif, setPermisoNotif] = useState(() => notificacionesService.getPermission());
+	// Habilitadas/deshabilitadas por el usuario (persiste en sessionStorage)
+	const [notifHabilitadas, setNotifHabilitadas] = useState(() => {
+		const guardado = sessionStorage.getItem('notif_habilitadas');
+		return guardado === null ? true : guardado === 'true';
+	});
+	// Ref para que el handler del socket siempre lea el valor actualizado (evita stale closure)
+	const notifHabilitadasRef = useRef(notifHabilitadas);
+	useEffect(() => { notifHabilitadasRef.current = notifHabilitadas; }, [notifHabilitadas]);
+
+	const toggleNotificaciones = async () => {
+		// Pre-calentar el AudioContext aprovechando este gesto del usuario
+		notificacionesService.preinicializarAudio();
+
+		if (!notifHabilitadas) {
+			// Al activar: solicitar permiso si aún no fue concedido
+			if (notificacionesService.isSupported() && notificacionesService.getPermission() !== 'granted') {
+				const resultado = await notificacionesService.requestPermission();
+				setPermisoNotif(resultado);
+			}
+		}
+		setNotifHabilitadas((prev) => {
+			sessionStorage.setItem('notif_habilitadas', String(!prev));
+			return !prev;
+		});
+	};
+
+	const agregarToast = (payload) => {
+		const nombreZona = normalizarNombreZona(payload.idZona, payload.nombreZona || '');
+		const toast = {
+			id: payload.id || `${Date.now()}`,
+			nombreEmisor: payload.nombreUsuario || '',
+			emailEmisor: payload.emailUsuario || payload.idUsuario || '',
+			motivo: payload.motivo,
+			nombreZona,
+			timestamp: payload.timestamp || new Date().toISOString()
+		};
+		setToasts((prev) => [...prev.slice(-3), toast]); // máx 4 toasts simultáneos
+	};
+
+	const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
 	const [misAlertas, setMisAlertas] = useState([]);
+	const [alertasParaMapa, setAlertasParaMapa] = useState([]);
+	const [zonasApi, setZonasApi] = useState([]);
 
 	const [enviando, setEnviando] = useState(false);
 	const [error, setError] = useState('');
@@ -25,6 +76,22 @@ const AlertasUsuario = () => {
 	const holdTriggeredRef = useRef(false);
 
 	const normalizarId = (value) => String(value || '').trim().toUpperCase();
+
+	const normalizarNombreZona = (idZona, nombreZonaRaw = '') => {
+		const idxDesdeId = Math.max(0, (Number(idZona) || 1) - 1);
+		if (Number.isFinite(Number(idZona)) && Number(idZona) > 0 && idxDesdeId < ZONAS_CAMPUS.length) {
+			return `Zona${idxDesdeId + 1}`;
+		}
+		const idxApi = zonasApi.findIndex(z => String(z.id) === String(idZona));
+		if (idxApi >= 0 && idxApi < ZONAS_CAMPUS.length) {
+			return `Zona${idxApi + 1}`;
+		}
+		const nom = String(nombreZonaRaw || '').trim();
+		if (/^zona\s*\d+$/i.test(nom)) {
+			return nom.replace(/\s+/g, '');
+		}
+		return nom;
+	};
 
 	const filtrarAlertasDelUsuario = (alertas = []) => {
 		if (!Array.isArray(alertas) || !user?.id) return [];
@@ -53,7 +120,6 @@ const AlertasUsuario = () => {
 		const cargarDatos = async () => {
 			try {
 				setError('');
-				// Cargar mis alertas activas
 				await cargarMisAlertas();
 			} catch (e) {
 				setError(e?.response?.data?.message || 'No se pudo cargar alertas');
@@ -62,7 +128,6 @@ const AlertasUsuario = () => {
 
 		cargarDatos();
 
-		// Recargar alertas cada 10 segundos como fallback
 		const intervalId = setInterval(() => {
 			cargarMisAlertas();
 		}, 10000);
@@ -70,34 +135,125 @@ const AlertasUsuario = () => {
 		return () => clearInterval(intervalId);
 	}, [user?.rol, user?.id]);
 
+	// Cargar catálogo de zonas para mapear idZona al crear alertas.
+	useEffect(() => {
+		if (!user?.token) return;
+		alertaService.getZonas()
+			.then(data => setZonasApi(Array.isArray(data) ? data : []))
+			.catch(() => {});
+	}, [user?.token]);
+
+	const pointInPolygon = (point, polygon) => {
+		let inside = false;
+		for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+			const xi = polygon[i].lng;
+			const yi = polygon[i].lat;
+			const xj = polygon[j].lng;
+			const yj = polygon[j].lat;
+			const intersects = ((yi > point.lat) !== (yj > point.lat))
+				&& (point.lng < ((xj - xi) * (point.lat - yi)) / ((yj - yi) || 1e-12) + xi);
+			if (intersects) inside = !inside;
+		}
+		return inside;
+	};
+
+	const resolverIdZona = (position) => {
+		if (!position) return zonasApi[0]?.id;
+		const zonaDetectada = ZONAS_CAMPUS.find(z => pointInPolygon(position, z.paths));
+		if (!zonaDetectada) return zonasApi[0]?.id;
+		const idx = ZONAS_CAMPUS.findIndex(z => z.id === zonaDetectada.id);
+		return zonasApi[idx]?.id || zonasApi[0]?.id;
+	};
+
+	const getCurrentPosition = () => new Promise((resolve) => {
+		if (!navigator.geolocation) {
+			resolve(null);
+			return;
+		}
+		navigator.geolocation.getCurrentPosition(
+			(pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+			() => resolve(null),
+			{ enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+		);
+	});
+
+	const cargarAlertasMapa = async () => {
+		if (user?.rol !== 'Guardia') return;
+		try {
+			const { default: guardiaService } = await import('../services/guardiaService');
+			const data = await guardiaService.getIncidentesActivos();
+			const lista = Array.isArray(data) ? data.map((a) => ({
+				...a,
+				nombreZona: normalizarNombreZona(a?.idZona, a?.nombreZona || '')
+			})) : [];
+			setAlertasParaMapa(lista);
+		} catch {
+			// El mapa sigue visible aunque falle la carga de alertas
+		}
+	};
+
+	useEffect(() => {
+		if (!user?.token || !user?.id || user?.rol !== 'Guardia') return;
+		cargarAlertasMapa();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [user?.token, user?.id, user?.rol]);
+
 	useEffect(() => {
 		if (!user?.token || !user?.id) return undefined;
 
 		const socket = alertaService.connectAlertasSocket({
 			onIncidenteCreado: (payload) => {
 				if (!payload) return;
+				const payloadNormalizado = {
+					...payload,
+					nombreZona: normalizarNombreZona(payload.idZona, payload.nombreZona || '')
+				};
 
 				const esMiAlerta = normalizarId(payload.idUsuario) === normalizarId(user.id);
 				if (esMiAlerta) {
-					setUltimaAlerta(payload);
+					setUltimaAlerta(payloadNormalizado);
 					setEstado('Activo');
-					// Agregar nueva alerta a la lista solo si no existe
 					setMisAlertas((prev) => {
 						const soloMias = filtrarAlertasDelUsuario(prev);
 						const existe = soloMias.some(a => a.id === payload.id);
-						return existe ? soloMias : [...soloMias, payload];
+						return existe ? soloMias : [...soloMias, payloadNormalizado];
 					});
 					setNotice('Alerta emitida correctamente.');
+
+					// Notificar a contactos y grupos de confianza por correo (HU-4)
+					contactosService.alertarContactos(payload.motivo).catch((err) => {
+						console.warn('[alertar contactos]', err?.response?.data?.message || err.message);
+					});
 				}
 
-				if (user.rol === 'Guardia' && !esMiAlerta) {
+				// Notificar a guardias y al resto de usuarios sobre alertas ajenas
+				if (!esMiAlerta) {
 					setNotice('Nueva alerta detectada en el sistema.');
+					// Toast visual + sonido + notificación del SO (HU-4: T3.2, T3.3)
+					// Solo si el usuario tiene las notificaciones habilitadas
+					if (notifHabilitadasRef.current) {
+						agregarToast(payloadNormalizado);
+						notificacionesService.notificar({
+							nombreEmisor: payloadNormalizado.nombreUsuario || '',
+							emailEmisor: payloadNormalizado.emailUsuario || payloadNormalizado.idUsuario || '',
+							motivo: payloadNormalizado.motivo,
+							nombreZona: payloadNormalizado.nombreZona || ''
+						});
+					}
+				}
+
+				// Actualizar mapa con nueva alerta
+				if (user.rol === 'Guardia') {
+					setAlertasParaMapa(prev => {
+						const existe = prev.some(a => a.id === payload.id);
+						return existe ? prev : [...prev, payloadNormalizado];
+					});
 				}
 			},
 			onIncidenteCerrado: (payload) => {
 				if (!payload) return;
-				// Remover alerta cerrada de la lista
 				setMisAlertas((prev) => prev.filter(a => a.id !== payload.id));
+				setAlertasParaMapa((prev) => prev.filter(a => a.id !== payload.id));
 				setNotice(`Alerta ${payload.id} ha sido cerrada por un guardia.`);
 			}
 		});
@@ -116,8 +272,14 @@ const AlertasUsuario = () => {
 			setError('');
 			setNotice('');
 
+			const position = await getCurrentPosition();
+			const idZona = resolverIdZona(position);
+
 			const nueva = await alertaService.crearAlerta({
 				motivo: motivo.trim(),
+				idZona,
+				lat: position?.lat,
+				lng: position?.lng,
 				idUsuario: user.id
 			});
 
@@ -181,6 +343,25 @@ const AlertasUsuario = () => {
 		return () => clearHoldInterval();
 	}, []);
 
+	/* Desbloquear AudioContext en el primer gesto del usuario (política autoplay del navegador).
+	   Sin esto, el sonido es bloqueado si el usuario nunca toca el botón de notificaciones. */
+	useEffect(() => {
+		const unlock = () => {
+			notificacionesService.preinicializarAudio();
+			document.removeEventListener('click', unlock);
+			document.removeEventListener('keydown', unlock);
+			document.removeEventListener('touchstart', unlock);
+		};
+		document.addEventListener('click', unlock);
+		document.addEventListener('keydown', unlock);
+		document.addEventListener('touchstart', unlock);
+		return () => {
+			document.removeEventListener('click', unlock);
+			document.removeEventListener('keydown', unlock);
+			document.removeEventListener('touchstart', unlock);
+		};
+	}, []);
+
 	const holdProgress = Math.min(1, Math.max(0, (HOLD_DURATION_MS - holdRemainingMs) / HOLD_DURATION_MS));
 	const holdSeconds = Math.max(1, Math.ceil(holdRemainingMs / 1000));
 
@@ -188,11 +369,44 @@ const AlertasUsuario = () => {
 		return <div className="alertas-shell"><p>No autorizado para esta interfaz.</p></div>;
 	}
 
+	/* Solicitar permiso de notificaciones al montar (HU-4) */
+	useEffect(() => {
+		if (notificacionesService.isSupported() && notificacionesService.getPermission() === 'default') {
+			notificacionesService.requestPermission().then(setPermisoNotif);
+		}
+	}, []);
+
 	return (
 		<div className="alertas-shell">
-			{user.rol === 'Guardia' && (
-				<section className="guardia-head-card" aria-label="Imagen de cabecera de guardia">
-					<img src={mapImage} alt="Mapa de referencia para guardia" className="guardia-head-image" />
+			{/* TOASTS DE ALERTA EN TIEMPO REAL (HU-4 – T3.2) */}
+			<NotificacionesContainer notificaciones={toasts} onDismiss={dismissToast} />
+
+			{/* BOTÓN TOGGLE NOTIFICACIONES – siempre visible si el navegador las soporta */}
+			{notificacionesService.isSupported() && (
+				<div className={`nt-permiso-banner ${!notifHabilitadas ? 'nt-permiso-banner--off' : ''}`}>
+					{permisoNotif === 'denied' ? (
+						<span>Las notificaciones están bloqueadas en tu navegador. Actívalas desde la configuración del sitio.</span>
+					) : (
+						<span>
+							{notifHabilitadas
+								? 'Las notificaciones de emergencia están activas.'
+								: 'Las notificaciones de emergencia están desactivadas.'}
+						</span>
+					)}
+					{permisoNotif !== 'denied' && (
+						<button type="button" onClick={toggleNotificaciones}>
+							{notifHabilitadas ? 'Desactivar Notificaciones' : 'Activar Notificaciones'}
+						</button>
+					)}
+				</div>
+			)}
+
+			{/* MAPA INTERACTIVO DEL CAMPUS UTA – solo visible para Guardia de Seguridad */}
+			{user?.rol === 'Guardia' && (
+				<section className="guardia-head-card" aria-label="Mapa interactivo del campus UTA">
+					<div style={{ minHeight: '320px', height: '360px' }}>
+						<MapaCampus alertas={alertasParaMapa} zonasApi={zonasApi} height="100%" />
+					</div>
 				</section>
 			)}
 
@@ -218,15 +432,19 @@ const AlertasUsuario = () => {
 							disabled={enviando}
 						>
 							<option value="Robo">Robo</option>
-							<option value="Agresión Verbal">Agresión Verbal</option>
-							<option value="Agresión Física">Agresión Física</option>
+							<option value="Agresion Verbal">Agresion Verbal</option>
+							<option value="Agresion Fisica">Agresion Fisica</option>
 						</select>
 					</label>
 
 					<label>
 						Zona
-							<select value="" disabled>
-							<option value="">Próximamente (Mapa interactivo)</option>
+						<select
+							value={motivo}
+							onChange={() => {}}
+							disabled
+						>
+							<option value="">Campus UTA – Ver mapa arriba</option>
 						</select>
 					</label>
 				</div>
@@ -267,7 +485,7 @@ const AlertasUsuario = () => {
 
 				<footer className="status-row">
 					<p><strong>Estado:</strong> {estado}</p>
-					<p><strong>Ubicación:</strong> Campus Central (Próximamente: Mapa interactivo)</p>
+					<p><strong>Ubicación:</strong> Campus UTA – Huachi, Ambato</p>
 				</footer>
 			</section>
 

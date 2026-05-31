@@ -3,26 +3,33 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import guardiaService from '../services/guardiaService';
 
+const esAsignadoAlGuardia = (incidente, idGuardia) => {
+	if (!incidente || !idGuardia) return false;
+	return String(incidente.idGuardiaAsignado || '').trim().toUpperCase() === String(idGuardia).trim().toUpperCase();
+};
+
 const CerrarReporteGuardia = () => {
 	const { idIncidente } = useParams();
 	const navigate = useNavigate();
 	const { user } = useAuth();
-  
+
 	const [incidente, setIncidente] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState('');
 	const [acciones, setAcciones] = useState('');
-	const [estado, setEstado] = useState('Cerrado');
+	const [estado] = useState('Cerrado');
 	const [enviando, setEnviando] = useState(false);
+	const [alertaAsignada, setAlertaAsignada] = useState(false);
 
 	useEffect(() => {
 		if (!idIncidente) {
 			navigate('/guardia');
 			return;
 		}
-    
+
 		cargarDetalles();
-	}, [idIncidente]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [idIncidente, user?.id]);
 
 	const cargarDetalles = async () => {
 		try {
@@ -30,6 +37,7 @@ const CerrarReporteGuardia = () => {
 			setError('');
 			const data = await guardiaService.getIncidenteDetalle(idIncidente);
 			setIncidente(data);
+			setAlertaAsignada(esAsignadoAlGuardia(data, user?.id));
 		} catch (err) {
 			const message = err?.response?.data?.message || 'No se pudo cargar los detalles del incidente';
 			setError(message);
@@ -40,7 +48,12 @@ const CerrarReporteGuardia = () => {
 
 	const handleCerrar = async (e) => {
 		e.preventDefault();
-    
+
+		if (!esAsignadoAlGuardia(incidente, user?.id)) {
+			setError('Solo el guardia asignado a esta alerta puede cerrar el caso');
+			return;
+		}
+
 		if (!acciones.trim()) {
 			setError('Por favor, describe las acciones realizadas');
 			return;
@@ -79,9 +92,7 @@ const CerrarReporteGuardia = () => {
 	return (
 		<div style={{ maxWidth: 1200, margin: '2rem auto', padding: '1rem' }}>
 			<div style={{ background: '#fff', borderRadius: 8, padding: '2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-				<h1 style={{ margin: '0 0 1.5rem 0', color: '#21335b', fontSize: '1.8rem' }}>
-					Cierre de Caso
-				</h1>
+				<h1 style={{ margin: '0 0 1.5rem 0', color: '#21335b', fontSize: '1.8rem' }}>Cierre de Caso</h1>
 
 				{error && (
 					<div style={{ padding: '1rem', background: '#fee2e2', color: '#b91c1c', borderRadius: 6, marginBottom: '1rem', border: '1px solid #fecaca' }}>
@@ -90,134 +101,67 @@ const CerrarReporteGuardia = () => {
 				)}
 
 				<form onSubmit={handleCerrar}>
-					{/* ID DEL CASO */}
 					<div style={{ marginBottom: '1.5rem' }}>
-						<label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#374151' }}>
-							ID del Caso:
-						</label>
+						<label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#374151' }}>ID del Caso:</label>
 						<input
 							type="text"
 							value={incidente.id || ''}
 							disabled
-							style={{
-								width: '100%',
-								padding: '0.75rem',
-								border: '1px solid #d1d5db',
-								borderRadius: 4,
-								background: '#f9fafb',
-								color: '#6b7280',
-								fontFamily: 'monospace'
-							}}
+							style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: 4, background: '#f9fafb', color: '#6b7280', fontFamily: 'monospace' }}
 						/>
 					</div>
 
-					{/* DESCRIPCIÓN DEL EVENTO (MOTIVO) */}
 					<div style={{ marginBottom: '1.5rem' }}>
-						<label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#374151' }}>
-							Descripción del Evento:
-						</label>
+						<label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#374151' }}>Descripción del Evento:</label>
 						<textarea
 							value={incidente.motivo || ''}
 							disabled
-							style={{
-								width: '100%',
-								padding: '0.75rem',
-								border: '1px solid #d1d5db',
-								borderRadius: 4,
-								background: '#f9fafb',
-								color: '#6b7280',
-								fontFamily: 'inherit',
-								minHeight: '80px',
-								resize: 'vertical'
-							}}
+							style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: 4, background: '#f9fafb', color: '#6b7280', fontFamily: 'inherit', minHeight: '80px', resize: 'vertical' }}
 						/>
 						<p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
 							Reportado por: {incidente.nombreUsuario || incidente.emailUsuario || 'Sin dato'}
 						</p>
+						<p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: alertaAsignada ? '#059669' : '#b91c1c', fontWeight: 600 }}>
+							{alertaAsignada ? 'Asignado a ti: puedes cerrar este caso' : 'No asignado a ti: no puedes cerrar este caso'}
+						</p>
 					</div>
 
-					{/* ACCIONES REALIZADAS */}
 					<div style={{ marginBottom: '1.5rem' }}>
-						<label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#374151' }}>
-							Acciones Realizadas: *
-						</label>
+						<label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#374151' }}>Acciones Realizadas: *</label>
 						<textarea
 							value={acciones}
 							onChange={(e) => setAcciones(e.target.value)}
 							placeholder="Describe brevemente las acciones tomadas para resolver la alerta (máx. 500 caracteres)"
 							maxLength={500}
-							style={{
-								width: '100%',
-								padding: '0.75rem',
-								border: '1px solid #d1d5db',
-								borderRadius: 4,
-								fontFamily: 'inherit',
-								minHeight: '120px',
-								resize: 'vertical',
-								fontSize: '0.95rem'
-							}}
+							style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: 4, fontFamily: 'inherit', minHeight: '120px', resize: 'vertical', fontSize: '0.95rem' }}
 						/>
-						<p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
-							{acciones.length}/500 caracteres
-						</p>
+						<p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{acciones.length}/500 caracteres</p>
 					</div>
 
-					{/* ESTADO DEL CASO */}
 					<div style={{ marginBottom: '2rem' }}>
-						<label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#374151' }}>
-							Estado del Caso:
-						</label>
+						<label style={{ display: 'block', fontWeight: '600', marginBottom: '0.5rem', color: '#374151' }}>Estado del Caso:</label>
 						<select
 							value={estado}
-							onChange={(e) => setEstado(e.target.value)}
 							disabled
-							style={{
-								padding: '0.75rem',
-								border: '1px solid #d1d5db',
-								borderRadius: 4,
-								background: '#f9fafb',
-								color: '#6b7280',
-								fontSize: '1rem',
-								cursor: 'not-allowed'
-							}}
+							style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: 4, background: '#f9fafb', color: '#6b7280', fontSize: '1rem', cursor: 'not-allowed' }}
 						>
 							<option value="Cerrado">Cerrado</option>
 						</select>
 					</div>
 
-					{/* BOTONES */}
 					<div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
 						<button
 							type="button"
 							onClick={() => navigate('/guardia')}
 							disabled={enviando}
-							style={{
-								padding: '0.75rem 1.5rem',
-								background: '#e5e7eb',
-								color: '#374151',
-								border: 'none',
-								borderRadius: 4,
-								cursor: enviando ? 'not-allowed' : 'pointer',
-								fontWeight: '600',
-								fontSize: '1rem'
-							}}
+							style={{ padding: '0.75rem 1.5rem', background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 4, cursor: enviando ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '1rem' }}
 						>
 							Cancelar
 						</button>
 						<button
 							type="submit"
-							disabled={enviando}
-							style={{
-								padding: '0.75rem 1.5rem',
-								background: '#21335b',
-								color: '#fff',
-								border: 'none',
-								borderRadius: 4,
-								cursor: enviando ? 'not-allowed' : 'pointer',
-								fontWeight: '600',
-								fontSize: '1rem',
-								opacity: enviando ? 0.7 : 1
-							}}
+							disabled={enviando || !alertaAsignada}
+							style={{ padding: '0.75rem 1.5rem', background: '#21335b', color: '#fff', border: 'none', borderRadius: 4, cursor: enviando || !alertaAsignada ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '1rem', opacity: enviando || !alertaAsignada ? 0.55 : 1 }}
 						>
 							{enviando ? 'Cerrando...' : 'Cerrar Caso'}
 						</button>

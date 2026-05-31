@@ -1,0 +1,548 @@
+/* ── Contenedor principal ────────────────────────────────────────────────── */
+.cc-shell {
+  background: #f4f6fa;
+  border: 1px solid #d8deea;
+  border-radius: 14px;
+  padding: 1.25rem 1.4rem;
+  box-shadow: 0 10px 24px rgba(34, 46, 76, 0.08);
+  margin-top: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+/* ── Cabecera ────────────────────────────────────────────────────────────── */
+.cc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.cc-header__title {
+  margin: 0;
+  color: #21335b;
+  font-size: 1.25rem;
+}
+
+.cc-header__sub {
+  margin: 0.3rem 0 0;
+  color: #4a556d;
+  font-size: 0.88rem;
+}
+
+/* ── Botón de alerta principal ───────────────────────────────────────────── */
+.cc-btn-alerta {
+  background: #c0392b;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s, transform 0.1s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cc-btn-alerta:hover:not(:disabled) {
+  background: #96281b;
+}
+
+.cc-btn-alerta:disabled {
+  background: #c8d1e2;
+  color: #8898b0;
+  cursor: not-allowed;
+}
+
+/* ── Resultado de alerta enviada ─────────────────────────────────────────── */
+.cc-alerta-resultado {
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  font-size: 0.9rem;
+}
+
+.cc-alerta-resultado--ok {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.cc-alerta-resultado--err {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+/* ── Mensaje adicional de alerta ─────────────────────────────────────────── */
+.cc-alerta-msg-wrap {
+  display: flex;
+}
+
+.cc-alerta-msg-wrap .cc-input {
+  flex: 1;
+}
+
+/* ── Pestañas ────────────────────────────────────────────────────────────── */
+.cc-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid #d8deea;
+  padding-bottom: 0;
+}
+
+.cc-tab {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #4a556d;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.cc-tab:hover {
+  color: #21335b;
+}
+
+.cc-tab--active {
+  color: #21335b;
+  border-bottom-color: #21335b;
+}
+
+.cc-badge {
+  background: #21335b;
+  color: #fff;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  font-weight: 700;
+}
+
+/* ── Panel de contenido ──────────────────────────────────────────────────── */
+.cc-panel {
+  display: grid;
+  gap: 0.9rem;
+}
+
+/* ── Formulario de agregar contacto ──────────────────────────────────────── */
+.cc-add-form {
+  background: #fff;
+  border: 1px solid #d8deea;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.cc-add-form__label {
+  margin: 0;
+  font-weight: 600;
+  color: #21335b;
+  font-size: 0.9rem;
+}
+
+/* ── Combobox ────────────────────────────────────────────────────────────── */
+.cc-combobox {
+  position: relative;
+}
+
+.cc-combobox__input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cc-combobox__input {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #c8d1e2;
+  border-radius: 8px;
+  padding: 0 2.5rem 0 0.8rem;
+  font-size: 0.95rem;
+  color: #22304f;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.cc-combobox__input:focus {
+  border-color: #21335b;
+}
+
+.cc-combobox__spinner {
+  position: absolute;
+  right: 0.75rem;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d8deea;
+  border-top-color: #21335b;
+  border-radius: 50%;
+  animation: cc-spin 0.6s linear infinite;
+}
+
+@keyframes cc-spin {
+  to { transform: rotate(360deg); }
+}
+
+.cc-combobox__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #c8d1e2;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  z-index: 100;
+  max-height: 230px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0;
+}
+
+.cc-combobox__item {
+  display: flex;
+  flex-direction: column;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.cc-combobox__item:hover {
+  background: #f0f4ff;
+}
+
+.cc-combobox__nombre {
+  font-weight: 600;
+  color: #21335b;
+  font-size: 0.92rem;
+}
+
+.cc-combobox__correo {
+  color: #5a6a85;
+  font-size: 0.8rem;
+}
+
+.cc-combobox__rol {
+  color: #8898b0;
+  font-size: 0.75rem;
+}
+
+/* ── Persona seleccionada ────────────────────────────────────────────────── */
+.cc-persona-seleccionada {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #e8edf8;
+  border: 1px solid #bcc8e0;
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  gap: 0.5rem;
+}
+
+.cc-persona-seleccionada strong {
+  color: #21335b;
+  font-size: 0.92rem;
+}
+
+.cc-btn-clear {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  color: #8898b0;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  line-height: 1;
+}
+
+.cc-btn-clear:hover {
+  color: #c0392b;
+}
+
+/* ── Inputs y labels ─────────────────────────────────────────────────────── */
+.cc-label {
+  display: grid;
+  gap: 0.3rem;
+  color: #2f3b54;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.cc-label--inline {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.cc-input {
+  height: 42px;
+  border: 1px solid #c8d1e2;
+  border-radius: 8px;
+  padding: 0 0.8rem;
+  font-size: 0.95rem;
+  color: #22304f;
+  box-sizing: border-box;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.cc-input:focus {
+  border-color: #21335b;
+}
+
+/* ── Chips (etiquetas de miembros) ───────────────────────────────────────── */
+.cc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.cc-chips--sm .cc-chip {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+}
+
+.cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #dce6f8;
+  color: #21335b;
+  border-radius: 20px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.cc-chip--readonly {
+  background: #e8edf8;
+  color: #4a556d;
+}
+
+.cc-chip__remove {
+  background: none;
+  border: none;
+  color: #5a6a85;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.cc-chip__remove:hover {
+  color: #c0392b;
+}
+
+/* ── Botones ─────────────────────────────────────────────────────────────── */
+.cc-btn {
+  padding: 0.5rem 1.1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.cc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cc-btn--primary {
+  background: #21335b;
+  color: #fff;
+}
+
+.cc-btn--primary:hover:not(:disabled) {
+  background: #16244a;
+}
+
+.cc-btn--secondary {
+  background: #e8edf8;
+  color: #21335b;
+  border: 1px solid #bcc8e0;
+}
+
+.cc-btn--secondary:hover:not(:disabled) {
+  background: #d0daf0;
+}
+
+.cc-btn--danger {
+  background: #fde8e8;
+  color: #c0392b;
+  border: 1px solid #f5c6c6;
+}
+
+.cc-btn--danger:hover:not(:disabled) {
+  background: #fbd0d0;
+}
+
+.cc-btn--new {
+  width: fit-content;
+}
+
+/* ── Lista de contactos/grupos ───────────────────────────────────────────── */
+.cc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.cc-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border: 1px solid #d8deea;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  gap: 0.8rem;
+}
+
+.cc-list__item--grupo {
+  flex-wrap: wrap;
+}
+
+.cc-list__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.cc-list__nombre {
+  font-weight: 700;
+  color: #21335b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-list__actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.cc-correo {
+  color: #5a6a85;
+  font-size: 0.8rem;
+}
+
+/* ── Formulario de grupo ─────────────────────────────────────────────────── */
+.cc-grupo-form {
+  background: #fff;
+  border: 1px solid #d8deea;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.cc-grupo-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* ── Mensajes ────────────────────────────────────────────────────────────── */
+.cc-error {
+  color: #c0392b;
+  background: #fde8e8;
+  border: 1px solid #f5c6c6;
+  border-radius: 6px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.cc-ok {
+  color: #155724;
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  border-radius: 6px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.cc-info {
+  color: #4a556d;
+  font-size: 0.88rem;
+  margin: 0;
+  padding: 0.5rem 0;
+}
+
+.cc-empty {
+  color: #8898b0;
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 1.2rem 0;
+  margin: 0;
+}
+
+.cc-loading {
+  color: #4a556d;
+  text-align: center;
+  padding: 0.5rem 0;
+  margin: 0;
+}
+
+/* ── Error con botón reintentar ──────────────────────────────────────────── */
+.cc-error-retry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.88rem;
+  color: #7a5c00;
+}
+
+/* ── Filtro local ────────────────────────────────────────────────────────── */
+.cc-filtro-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cc-filtro__input {
+  padding-right: 2.2rem !important;
+}
+
+.cc-filtro__clear {
+  position: absolute;
+  right: 0.7rem;
+  background: none;
+  border: none;
+  font-size: 1.15rem;
+  color: #8898b0;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.cc-filtro__clear:hover {
+  color: #c0392b;
+}

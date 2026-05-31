@@ -1,0 +1,211 @@
+/* ── Contenedor flotante (esquina superior derecha) ──────────────────────── */
+.nt-container {
+  position: fixed;
+  top: 1.2rem;
+  right: 1.2rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 360px;
+  width: calc(100vw - 2.4rem);
+  pointer-events: none;
+}
+
+/* ── Toast individual ────────────────────────────────────────────────────── */
+.nt-toast {
+  background: #fff;
+  border: 2px solid #e53e3e;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(229, 62, 62, 0.25), 0 2px 8px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  pointer-events: all;
+  position: relative;
+  animation-fill-mode: both;
+  animation-duration: 0.36s;
+  animation-timing-function: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.nt-toast--entrando {
+  animation-name: nt-entrar;
+}
+
+.nt-toast--saliendo {
+  animation-name: nt-salir;
+  animation-timing-function: ease-in;
+  animation-duration: 0.32s;
+}
+
+@keyframes nt-entrar {
+  from {
+    opacity: 0;
+    transform: translateX(110%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes nt-salir {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(110%) scale(0.9);
+  }
+}
+
+/* Pulso de borde para llamar la atención */
+@keyframes nt-pulso {
+  0%, 100% { border-color: #e53e3e; box-shadow: 0 8px 32px rgba(229, 62, 62, 0.25); }
+  50%       { border-color: #fc8181; box-shadow: 0 8px 32px rgba(229, 62, 62, 0.55); }
+}
+
+.nt-toast--entrando {
+  animation: nt-entrar 0.36s cubic-bezier(0.175, 0.885, 0.32, 1.275) both,
+             nt-pulso 1.2s ease-in-out 0.36s 3;
+}
+
+/* ── Barra de progreso (cuenta regresiva) ───────────────────────────────── */
+.nt-barra {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #e53e3e, #fc8181);
+  transition: width 0.08s linear;
+  border-radius: 2px 0 0 0;
+}
+
+/* ── Cabecera ────────────────────────────────────────────────────────────── */
+.nt-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #fff5f5;
+  border-bottom: 1px solid #fed7d7;
+  padding: 0.6rem 0.9rem 0.5rem;
+}
+
+.nt-icono {
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.nt-titulo {
+  flex: 1;
+  color: #c53030;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.nt-cerrar {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: #9b2c2c;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.nt-cerrar:hover {
+  opacity: 1;
+}
+
+/* ── Cuerpo ──────────────────────────────────────────────────────────────── */
+.nt-cuerpo {
+  padding: 0.7rem 0.9rem 0.8rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.nt-fila {
+  margin: 0;
+  display: flex;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.nt-etiqueta {
+  color: #718096;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.nt-valor {
+  color: #2d3748;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.nt-motivo {
+  color: #c53030;
+  font-weight: 700;
+}
+
+.nt-hora {
+  margin: 0.3rem 0 0;
+  font-size: 0.75rem;
+  color: #a0aec0;
+  text-align: right;
+}
+
+/* ── Permiso de notificaciones ───────────────────────────────────────────── */
+.nt-permiso-banner {
+  background: #fffbeb;
+  border: 1px solid #f6e05e;
+  border-radius: 8px;
+  padding: 0.55rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  font-size: 0.85rem;
+  color: #744210;
+  margin-bottom: 0.75rem;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+/* Estado desactivado: tono gris neutro */
+.nt-permiso-banner--off {
+  background: #f7fafc;
+  border-color: #cbd5e0;
+  color: #4a5568;
+}
+
+.nt-permiso-banner button {
+  background: #d69e2e;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.nt-permiso-banner button:hover {
+  background: #b7791f;
+}
+
+/* Botón "Desactivar" en rojo tenue */
+.nt-permiso-banner:not(.nt-permiso-banner--off) button {
+  background: #e53e3e;
+}
+
+.nt-permiso-banner:not(.nt-permiso-banner--off) button:hover {
+  background: #c53030;
+}

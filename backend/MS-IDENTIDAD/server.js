@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 const { testConnections, databaseNames } = require('./config/db');
 const { protect } = require('./middlewares/authMiddleware');
 const { authorize } = require('./middlewares/roleMiddleware');
@@ -12,6 +13,9 @@ app.use(express.json());
 
 // Rutas de autenticación
 app.use('/api/auth', authRoutes);
+
+// Rutas de gestión de usuarios (Administrador)
+app.use('/api/identidad/usuarios', adminRoutes);
 
 // Health check: verifica conexión a BD_IDENTIDAD y BD_UTA
 app.get('/api/identidad/health', async (req, res) => {

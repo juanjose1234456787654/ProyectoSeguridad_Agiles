@@ -7,9 +7,9 @@ const emitRealtime = (req, eventName, payload) => {
   }
 };
 
-const registrarHistorialCierre = async ({ idIncidente, acciones }) => {
+const registrarHistorialCierre = async ({ idIncidente, acciones, idGuardia }) => {
   try {
-    const result = await Incidente.saveHistorialCierre({ idIncidente, acciones });
+    const result = await Incidente.saveHistorialCierre({ idIncidente, acciones, idGuardia });
     if (!result.saved) {
       console.warn(`[historial] No se guardó historial para ${idIncidente}: ${result.reason}`);
       return;
@@ -20,6 +20,17 @@ const registrarHistorialCierre = async ({ idIncidente, acciones }) => {
     );
   } catch (error) {
     console.error(`[historial] Error guardando historial para ${idIncidente}:`, error.message);
+  }
+};
+
+// GET /api/incidentes/estadisticas – solo Administrador (T5.1 / T5.2)
+const getEstadisticas = async (req, res) => {
+  try {
+    const datos = await Incidente.getEstadisticas();
+    res.json(datos);
+  } catch (error) {
+    console.error('[estadisticas]', error);
+    res.status(500).json({ message: 'Error al obtener estadísticas' });
   }
 };
 
@@ -91,24 +102,34 @@ const getById = async (req, res) => {
 // POST /api/incidentes
 const create = async (req, res) => {
   try {
-    const { motivo, estado, idZona } = req.body;
+    const { motivo, estado, idZona, lat, lng } = req.body;
     let idUsuario = req.usuario?.id || req.body.idUsuario;
     
     // Asegurar que idUsuario sea string y sin espacios
     idUsuario = String(idUsuario).trim();
 
     console.log(`[create] Creando incidente - idUsuario: "${idUsuario}" (length: ${idUsuario.length}, type: ${typeof idUsuario})`);
-    console.log(`[create] motivo: "${motivo}", estado: "${estado}", idZona: "${idZona}"`);
+    console.log(`[create] motivo: "${motivo}", estado: "${estado}", idZona: "${idZona}", lat: "${lat}", lng: "${lng}"`);
 
     if (!motivo || !idUsuario) {
       return res.status(400).json({ message: 'Faltan campos obligatorios: motivo' });
     }
 
-    const nuevo = await Incidente.create({ motivo, estado, idZona, idUsuario });
+    const nuevo = await Incidente.create({ motivo, estado, idZona, idUsuario, lat, lng });
     
     console.log(`[create] Incidente creado: ${nuevo.id} para usuario: "${nuevo.idUsuario}"`);
-    
-    emitRealtime(req, 'incidente:creado', nuevo);
+
+    // Enriquecer el evento WebSocket con info del usuario (nombre, email, zona)
+    // para que los receptores puedan mostrar "De: [nombre] | Motivo: [motivo]"
+    let payloadWS = { ...nuevo };
+    try {
+      const enriquecido = await Incidente.findById(nuevo.id);
+      if (enriquecido) payloadWS = enriquecido;
+    } catch (e) {
+      console.warn('[create] No se pudo enriquecer payload WS:', e.message);
+    }
+
+    emitRealtime(req, 'incidente:creado', payloadWS);
     res.status(201).json(nuevo);
   } catch (error) {
     console.error(`[create] Error:`, error);
@@ -158,9 +179,22 @@ const close = async (req, res) => {
       return res.status(400).json({ message: 'El incidente ya está cerrado' });
     }
 
+    if (req.usuario?.rol === 'Guardia') {
+      const asignacionActual = await Incidente.getAsignacionActualByIncidente(req.params.id);
+      const idGuardiaAsignado = String(asignacionActual?.idGuardiaAsignado || '').trim().toUpperCase();
+      const idGuardiaActual = String(req.usuario?.id || '').trim().toUpperCase();
+
+      if (!asignacionActual || !idGuardiaAsignado || idGuardiaAsignado !== idGuardiaActual) {
+        return res.status(403).json({
+          message: 'Solo el guardia asignado a esta alerta puede cerrar el caso'
+        });
+      }
+    }
+
     const { acciones } = req.body || {};
+    const idGuardia = req.usuario?.id || null;
     const cerrado = await Incidente.close(req.params.id, acciones || null);
-    await registrarHistorialCierre({ idIncidente: req.params.id, acciones });
+    await registrarHistorialCierre({ idIncidente: req.params.id, acciones, idGuardia });
     emitRealtime(req, 'incidente:cerrado', cerrado);
     res.json(cerrado);
   } catch (error) {
@@ -185,4 +219,4 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getActivos, getByUsuario, getById, create, update, close, remove };
+module.exports = { getAll, getActivos, getByUsuario, getById, create, update, close, remove, getEstadisticas };
