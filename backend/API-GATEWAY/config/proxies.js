@@ -28,6 +28,23 @@ const identidadApiProxy = createProxyMiddleware(
   }
 );
 
+const identidadSocketProxy = createProxyMiddleware({
+  target: process.env.MS_IDENTIDAD_URL || 'http://localhost:4001',
+  changeOrigin: true,
+  ws: true,
+  on: {
+    error: (err, req, res) => {
+      console.error(`[PROXY ERROR] ${req.method} ${req.path} (socket identidad) → ${(process.env.MS_IDENTIDAD_URL || 'http://localhost:4001')}:`, err.message);
+      if (res && typeof res.status === 'function') {
+        res.status(502).json({
+          message: 'Servicio de socket de identidad no disponible. Intenta más tarde.',
+          servicio: process.env.MS_IDENTIDAD_URL || 'http://localhost:4001'
+        });
+      }
+    }
+  }
+});
+
 const incidentesProxy = createProxyMiddleware(
   {
     ...proxyOptions(process.env.MS_INCIDENTES_URL || 'http://localhost:4002'),
@@ -81,6 +98,7 @@ const contactosProxy = createProxyMiddleware(
 module.exports = {
   identidadAuthProxy,
   identidadApiProxy,
+  identidadSocketProxy,
   incidentesProxy,
   incidentesSocketProxy,
   seguridadProxy,

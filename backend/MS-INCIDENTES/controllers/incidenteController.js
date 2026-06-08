@@ -12,21 +12,23 @@ const registrarHistorialCierre = async ({ idIncidente, acciones, idGuardia }) =>
     const result = await Incidente.saveHistorialCierre({ idIncidente, acciones, idGuardia });
     if (!result.saved) {
       console.warn(`[historial] No se guardó historial para ${idIncidente}: ${result.reason}`);
-      return;
+      return { saved: false, reason: result.reason || 'No se guardó historial' };
     }
 
     console.log(
       `[historial] Registrado ${result.idHistorial} para incidente ${idIncidente} con asignación ${result.idAsignacion}`
     );
+    return { saved: true, ...result };
   } catch (error) {
     console.error(`[historial] Error guardando historial para ${idIncidente}:`, error.message);
+    return { saved: false, reason: error.message || 'Error guardando historial' };
   }
 };
 
 // GET /api/incidentes/estadisticas – solo Administrador (T5.1 / T5.2)
 const getEstadisticas = async (req, res) => {
   try {
-    const datos = await Incidente.getEstadisticas();
+    const datos = await Incidente.getEstadisticas(req.query?.periodo || req.query?.temporalidad);
     res.json(datos);
   } catch (error) {
     console.error('[estadisticas]', error);
@@ -170,12 +172,15 @@ const update = async (req, res) => {
 // PATCH /api/incidentes/:id/cerrar
 const close = async (req, res) => {
   try {
+    console.log(`[close] Solicitud de cierre recibida para ${req.params.id} por usuario=${req.usuario?.id || 'N/A'} rol=${req.usuario?.rol || 'N/A'}`);
     const existente = await Incidente.findById(req.params.id);
     if (!existente) {
+      console.warn(`[close] Incidente ${req.params.id} no encontrado`);
       return res.status(404).json({ message: 'Incidente no encontrado' });
     }
 
     if (existente.estado === 'Cerrado') {
+      console.warn(`[close] Incidente ${req.params.id} ya estaba cerrado`);
       return res.status(400).json({ message: 'El incidente ya está cerrado' });
     }
 
@@ -185,6 +190,7 @@ const close = async (req, res) => {
       const idGuardiaActual = String(req.usuario?.id || '').trim().toUpperCase();
 
       if (!asignacionActual || !idGuardiaAsignado || idGuardiaAsignado !== idGuardiaActual) {
+        console.warn(`[close] Rechazado cierre de ${req.params.id}: guardia actual=${idGuardiaActual} guardia asignado=${idGuardiaAsignado || 'N/A'}`);
         return res.status(403).json({
           message: 'Solo el guardia asignado a esta alerta puede cerrar el caso'
         });
@@ -194,9 +200,22 @@ const close = async (req, res) => {
     const { acciones } = req.body || {};
     const idGuardia = req.usuario?.id || null;
     const cerrado = await Incidente.close(req.params.id, acciones || null);
-    await registrarHistorialCierre({ idIncidente: req.params.id, acciones, idGuardia });
+    const historial = await registrarHistorialCierre({ idIncidente: req.params.id, acciones, idGuardia });
+    console.log(`[close] Resultado historial para ${req.params.id}: saved=${Boolean(historial?.saved)} reason=${historial?.reason || 'none'}`);
+
+    if (!historial?.saved) {
+      return res.status(500).json({
+        message: 'El caso se cerró, pero no se pudo guardar en HISTORIAL',
+        cerrado,
+        historial: historial || { saved: false, reason: 'Sin detalle' }
+      });
+    }
+
     emitRealtime(req, 'incidente:cerrado', cerrado);
-    res.json(cerrado);
+    res.json({
+      ...cerrado,
+      historial: historial || { saved: false, reason: 'No se pudo determinar estado de historial' }
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al cerrar el incidente' });

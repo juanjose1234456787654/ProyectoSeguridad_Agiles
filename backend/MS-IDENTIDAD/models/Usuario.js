@@ -3,6 +3,21 @@ const { getDb } = require('../config/db');
 const identidadDb = getDb('identidad');
 const utaDb = getDb('uta');
 
+const ensureBloqueadoColumn = async () => {
+  try {
+    await identidadDb.query(
+      `IF NOT EXISTS (
+         SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_NAME = 'USUARIOS' AND COLUMN_NAME = 'BLOQUEADO'
+       )
+       ALTER TABLE USUARIOS ADD BLOQUEADO BIT NOT NULL DEFAULT 0`
+    );
+  } catch (error) {
+    console.warn('[Usuario] No se pudo asegurar columna BLOQUEADO:', error.message);
+  }
+};
+ensureBloqueadoColumn();
+
 const IDENTITY_ROLE_BY_UTA_ROLE_NAME = {
   'Guardia de Seguridad': 'ROL02',
   Estudiante: 'ROL03',
@@ -172,18 +187,34 @@ const Usuario = {
   findAll: async () => {
     const utaDb = process.env.DB_UTA_NAME || 'BD_UTA';
     let rows = [];
+    let hasBloqueadoColumn = false;
+
+    try {
+      const [colRows] = await identidadDb.query(
+        `SELECT COUNT(*) AS total
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_NAME = 'USUARIOS' AND COLUMN_NAME = 'BLOQUEADO'`
+      );
+      hasBloqueadoColumn = Number(colRows?.[0]?.total || 0) > 0;
+    } catch {
+      hasBloqueadoColumn = false;
+    }
+
+    const bloqueadoSelect = hasBloqueadoColumn
+      ? 'COALESCE(u.BLOQUEADO, 0) AS bloqueadoRaw'
+      : 'CAST(0 AS BIT) AS bloqueadoRaw';
 
     // Intento 1: con JOIN cross-database a BD_UTA para obtener nombres
     try {
       [rows] = await identidadDb.query(
-        `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, u.ID_ROL_PER AS rolCodigo, r.NOM_ROL AS rolNombre, RTRIM(ISNULL(p.NOM1_PER,'') + ' ' + ISNULL(p.NOM2_PER,'') + ' ' + ISNULL(p.APE1_PER,'') + ' ' + ISNULL(p.APE2_PER,'')) AS nombre FROM USUARIOS u LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER LEFT JOIN ${utaDb}.dbo.PERSONAS_UTA p ON p.COR_PER = u.COR_INS_REF_USU ORDER BY u.ID_USU`
+        `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, u.ID_ROL_PER AS rolCodigo, r.NOM_ROL AS rolNombre, ${bloqueadoSelect}, RTRIM(ISNULL(p.NOM1_PER,'') + ' ' + ISNULL(p.NOM2_PER,'') + ' ' + ISNULL(p.APE1_PER,'') + ' ' + ISNULL(p.APE2_PER,'')) AS nombre FROM USUARIOS u LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER LEFT JOIN ${utaDb}.dbo.PERSONAS_UTA p ON p.COR_PER = u.COR_INS_REF_USU ORDER BY u.ID_USU`
       );
       console.log(`[findAll] Con nombres, rows: ${rows?.length}`);
     } catch (e) {
       console.warn(`[findAll] JOIN BD_UTA falló (${e.message.slice(0,200)}), reintentando sin nombres...`);
       try {
         [rows] = await identidadDb.query(
-          `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, u.ID_ROL_PER AS rolCodigo, r.NOM_ROL AS rolNombre FROM USUARIOS u LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER ORDER BY u.ID_USU`
+          `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, u.ID_ROL_PER AS rolCodigo, r.NOM_ROL AS rolNombre, ${bloqueadoSelect} FROM USUARIOS u LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER ORDER BY u.ID_USU`
         );
         console.log(`[findAll] Sin nombres, rows: ${rows?.length}`);
         rows = rows.map(r => ({ ...r, nombre: '' }));
@@ -218,7 +249,7 @@ const Usuario = {
         rolCodigo: row.rolCodigo,
         rol: USER_FACING_ROLE_BY_NAME[row.rolNombre] || row.rolNombre || 'Desconocido',
         nombre: (row.nombre || '').trim(),
-        bloqueado: false,
+        bloqueado: Boolean(Number(row.bloqueadoRaw || 0)),
         contactos,
         grupos
       };
@@ -251,7 +282,7 @@ const Usuario = {
     params.push(id);
     await identidadDb.query(`UPDATE USUARIOS SET ${fields.join(', ')} WHERE ID_USU = ?`, params);
     const [rows] = await identidadDb.query(
-      `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, r.NOM_ROL AS rol
+      `SELECT u.ID_USU AS id, u.COR_INS_REF_USU AS email, u.ID_ROL_PER AS rolCodigo, r.NOM_ROL AS rol
        FROM USUARIOS u LEFT JOIN ROLES r ON r.ID_ROL = u.ID_ROL_PER WHERE u.ID_USU = ?`, [id]
     );
     return rows[0] || null;

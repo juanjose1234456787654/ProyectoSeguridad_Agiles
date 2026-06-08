@@ -11,13 +11,75 @@ const normalizeDatosJson = (datosJson) => {
   }
 };
 
+const PERIODOS_VALIDOS = new Set(['dia', 'semana', 'mes', 'anio']);
+
+const normalizarPeriodo = (periodo) => {
+  const valor = String(periodo || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  return PERIODOS_VALIDOS.has(valor) ? valor : 'mes';
+};
+
+const calcularRango = (periodo) => {
+  const ahora = new Date();
+  const inicio = new Date(ahora);
+  const fin = new Date(ahora);
+
+  if (periodo === 'dia') {
+    inicio.setHours(0, 0, 0, 0);
+    fin.setHours(23, 59, 59, 999);
+    return { inicio, fin };
+  }
+
+  if (periodo === 'semana') {
+    const dia = ahora.getDay();
+    const ajuste = dia === 0 ? -6 : 1 - dia;
+    inicio.setDate(ahora.getDate() + ajuste);
+    inicio.setHours(0, 0, 0, 0);
+    fin.setTime(inicio.getTime());
+    fin.setDate(inicio.getDate() + 6);
+    fin.setHours(23, 59, 59, 999);
+    return { inicio, fin };
+  }
+
+  if (periodo === 'anio') {
+    inicio.setMonth(0, 1);
+    inicio.setHours(0, 0, 0, 0);
+    fin.setMonth(11, 31);
+    fin.setHours(23, 59, 59, 999);
+    return { inicio, fin };
+  }
+
+  inicio.setDate(1);
+  inicio.setHours(0, 0, 0, 0);
+  fin.setMonth(inicio.getMonth() + 1, 0);
+  fin.setHours(23, 59, 59, 999);
+  return { inicio, fin };
+};
+
 const getAll = async (req, res) => {
   try {
-    const historial = await Historial.findAll();
+    const periodo = normalizarPeriodo(req.query?.periodo || req.query?.temporalidad);
+    const { inicio, fin } = calcularRango(periodo);
+    const historial = await Historial.findAll({ inicio, fin });
     res.json(historial);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al obtener historial' });
+  }
+};
+
+const getDetallado = async (req, res) => {
+  try {
+    const { q = '', page = 1, limit = 8 } = req.query || {};
+    const resultado = await Historial.findDetailed({ search: q, page, limit });
+    res.json(resultado);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener historial detallado' });
   }
 };
 
@@ -100,4 +162,4 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove };
+module.exports = { getAll, getDetallado, getById, create, update, remove };

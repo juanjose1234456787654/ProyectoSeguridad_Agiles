@@ -33,6 +33,17 @@ const mysqlPools = (() => {
 
 const escapeSqlValue = (value) => {
   if (value === null || value === undefined) return 'NULL';
+  if (value instanceof Date) {
+    const pad = (n, len = 2) => String(n).padStart(len, '0');
+    const yyyy = value.getFullYear();
+    const mm = pad(value.getMonth() + 1);
+    const dd = pad(value.getDate());
+    const hh = pad(value.getHours());
+    const mi = pad(value.getMinutes());
+    const ss = pad(value.getSeconds());
+    const mss = pad(value.getMilliseconds(), 3);
+    return `'${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}.${mss}'`;
+  }
   if (typeof value === 'number') return String(value);
   if (typeof value === 'boolean') return value ? '1' : '0';
   return `'${String(value).replace(/'/g, "''")}'`;

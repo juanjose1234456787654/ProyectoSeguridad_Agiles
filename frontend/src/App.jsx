@@ -10,6 +10,7 @@ import MapaGuardia from './entidades/Guardia/components/MapaGuardia';
 import CerrarReporteGuardia from './entidades/Guardia/components/CerrarReporteGuardia';
 import AlertasUsuario from './entidades/Guardia/components/AlertasUsuario';
 import DashboardAdmin from './entidades/Administrador/components/DashboardAdmin';
+import HistorialIncidentes from './entidades/Historial/components/HistorialIncidentes';
 import Unauthorized from './auth/Unauthorized';
 
 function App() {
@@ -58,6 +59,11 @@ function App() {
           <Route path="/admin" element={
             <PrivateRoute allowedRoles={['Administrador']}>
               <DashboardAdmin />
+            </PrivateRoute>
+          } />
+          <Route path="/historial-incidentes" element={
+            <PrivateRoute allowedRoles={['Administrador', 'Guardia']}>
+              <HistorialIncidentes />
             </PrivateRoute>
           } />
           

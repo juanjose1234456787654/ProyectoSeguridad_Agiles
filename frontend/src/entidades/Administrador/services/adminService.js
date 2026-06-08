@@ -30,8 +30,36 @@ const handleResponse = async (res) => {
 export const getEstadisticas = () =>
   fetch(`${API}/incidentes/estadisticas`, { headers: authHeaders() }).then(handleResponse);
 
-export const getHistorial = () =>
-  fetch(`${API}/estadisticas/historial`, { headers: authHeaders() }).then(handleResponse);
+const PERIODOS_VALIDOS = new Set(['dia', 'semana', 'mes', 'anio']);
+
+const normalizarPeriodo = (periodo) => {
+  const valor = String(periodo || '').trim().toLowerCase();
+  return PERIODOS_VALIDOS.has(valor) ? valor : 'mes';
+};
+
+export const getHistorial = ({ periodo } = {}) => {
+  const periodoNormalizado = normalizarPeriodo(periodo);
+  const query = new URLSearchParams({
+    periodo: periodoNormalizado,
+    temporalidad: periodoNormalizado
+  });
+
+  return fetch(`${API}/estadisticas/historial?${query.toString()}`, {
+    headers: authHeaders()
+  }).then(handleResponse);
+};
+
+export const getEstadisticasPorPeriodo = ({ periodo } = {}) => {
+  const periodoNormalizado = normalizarPeriodo(periodo);
+  const query = new URLSearchParams({
+    periodo: periodoNormalizado,
+    temporalidad: periodoNormalizado
+  });
+
+  return fetch(`${API}/incidentes/estadisticas?${query.toString()}`, {
+    headers: authHeaders()
+  }).then(handleResponse);
+};
 
 // ── Gestión de usuarios ───────────────────────────────────────────────────────
 

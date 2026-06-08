@@ -1,5 +1,5 @@
 const express = require('express');
-const { getAll, getById, create, update, remove } = require('../controllers/historialController');
+const { getAll, getDetallado, getById, create, update, remove } = require('../controllers/historialController');
 const { protect } = require('../middlewares/authMiddleware');
 const { authorize } = require('../middlewares/roleMiddleware');
 
@@ -9,6 +9,7 @@ router.use(protect);
 
 // Consultas: Administrador y Guardia
 router.get('/', authorize('Administrador', 'Guardia'), getAll);
+router.get('/detallado', authorize('Administrador', 'Guardia'), getDetallado);
 router.get('/:id', authorize('Administrador', 'Guardia'), getById);
 
 // Escritura: solo Administrador

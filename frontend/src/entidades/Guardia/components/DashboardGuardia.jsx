@@ -160,6 +160,7 @@ const DashboardGuardia = () => {
 	};
 
 	const fromMapa = location.state?.from === 'mapa';
+	const irAHistorial = () => navigate('/historial-incidentes');
 
 	return (
 		<div className={`dg-shell dg-screen-enter ${fromMapa ? 'dg-screen-enter--from-left' : 'dg-screen-enter--from-right'}`}>
@@ -196,6 +197,9 @@ const DashboardGuardia = () => {
 								{guardandoEstado && !enServicio ? 'Guardando...' : 'No en Servicio'}
 							</label>
 						</div>
+						<button type="button" className="dg-main__history" onClick={irAHistorial}>
+							Historial
+						</button>
 						<button onClick={logout} className="dg-main__logout">Salir</button>
 					</div>
 				</header>

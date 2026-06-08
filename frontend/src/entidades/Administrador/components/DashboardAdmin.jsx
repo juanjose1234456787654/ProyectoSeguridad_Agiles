@@ -8,13 +8,15 @@ import { getGuardiasEstado } from '../services/adminService';
 import GestionUsuarios from './GestionUsuarios';
 import GuardiasEstado from './GuardiasEstado';
 import EstadisticasPanel from './EstadisticasPanel';
+import HistorialIncidentes from '../../Historial/components/HistorialIncidentes';
 import '../styles/DashboardAdmin.css';
 
 const SECCIONES_MENU = [
   { id: 'mapa', label: 'Mapa y Alertas' },
   { id: 'usuarios', label: 'Gestión de Usuarios' },
   { id: 'guardias', label: 'Gestión de Guardias' },
-  { id: 'estadisticas', label: 'Estadísticas' }
+  { id: 'estadisticas', label: 'Estadísticas' },
+  { id: 'historial', label: 'Historial de Incidentes' }
 ];
 
 const esEnServicio = (estado) => {
@@ -61,7 +63,7 @@ const nombreGuardiaAsignado = (alerta) => {
 };
 
 const DashboardAdmin = () => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const [alertasActivas, setAlertasActivas] = useState([]);
   const [zonasApi, setZonasApi] = useState([]);
@@ -75,8 +77,11 @@ const DashboardAdmin = () => {
   const [asignandoGuardiaId, setAsignandoGuardiaId] = useState(null);
   const [confirmacionAsignacion, setConfirmacionAsignacion] = useState(null);
   const [guardiaRefreshKey, setGuardiaRefreshKey] = useState(0);
+  const [realtimeRefreshKey, setRealtimeRefreshKey] = useState(0);
+  const [usuariosRefreshKey, setUsuariosRefreshKey] = useState(0);
   const socketRef = useRef(null);
   const socketSeguridadRef = useRef(null);
+  const socketIdentidadRef = useRef(null);
 
   const cargarAlertas = async () => {
     try {
@@ -93,7 +98,12 @@ const DashboardAdmin = () => {
   }, []);
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:4000', { transports: ['websocket'] });
+    if (!user?.token) return undefined;
+
+    socketRef.current = io('http://localhost:4000', {
+      transports: ['websocket'],
+      auth: { token: user.token }
+    });
 
     socketRef.current.on('incidente:creado', (payload) => {
       if (!payload) return;
@@ -101,21 +111,29 @@ const DashboardAdmin = () => {
         const existe = prev.some(a => a.id === payload.id);
         return existe ? prev : [...prev, payload];
       });
+      setRealtimeRefreshKey((k) => k + 1);
     });
 
     socketRef.current.on('incidente:cerrado', (payload) => {
       if (!payload) return;
       setAlertasActivas(prev => prev.filter(a => a.id !== payload.id));
+      setRealtimeRefreshKey((k) => k + 1);
     });
 
-    socketRef.current.on('incidente:actualizado', () => { cargarAlertas(); });
+    socketRef.current.on('incidente:actualizado', () => {
+      cargarAlertas();
+      setRealtimeRefreshKey((k) => k + 1);
+    });
 
     return () => socketRef.current?.disconnect();
-  }, []);
+  }, [user?.token]);
 
   useEffect(() => {
+    if (!user?.token) return undefined;
+
     socketSeguridadRef.current = io('http://localhost:4003', {
-      transports: ['websocket']
+      transports: ['websocket'],
+      auth: { token: user.token }
     });
     socketSeguridadRef.current.on('connect', () => {
       console.log('[SOCKET SEGURIDAD] conectado al admin');
@@ -135,7 +153,27 @@ const DashboardAdmin = () => {
       }
     });
     return () => socketSeguridadRef.current?.disconnect();
-  }, [panelGuardiasAbierto]);
+  }, [panelGuardiasAbierto, user?.token]);
+
+  useEffect(() => {
+    if (!user?.token) return undefined;
+
+    socketIdentidadRef.current = io('http://localhost:4000', {
+      path: '/socket-identidad',
+      transports: ['websocket'],
+      auth: { token: user.token }
+    });
+
+    const onUsuarioChange = () => {
+      setUsuariosRefreshKey((k) => k + 1);
+    };
+
+    socketIdentidadRef.current.on('usuario:actualizado', onUsuarioChange);
+    socketIdentidadRef.current.on('usuario:bloqueado', onUsuarioChange);
+    socketIdentidadRef.current.on('usuario:eliminado', onUsuarioChange);
+
+    return () => socketIdentidadRef.current?.disconnect();
+  }, [user?.token]);
 
   useEffect(() => {
     setPanelGuardiasAbierto(false);
@@ -404,9 +442,10 @@ const DashboardAdmin = () => {
             </div>
 
             <div className="da-panel-content">
-              {seccionActiva === 'usuarios' && <GestionUsuarios />}
+              {seccionActiva === 'usuarios' && <GestionUsuarios refreshSignal={usuariosRefreshKey} />}
               {seccionActiva === 'guardias' && <GuardiasEstado refreshKey={guardiaRefreshKey} />}
-              {seccionActiva === 'estadisticas' && <EstadisticasPanel />}
+              {seccionActiva === 'estadisticas' && <EstadisticasPanel refreshSignal={realtimeRefreshKey} />}
+              {seccionActiva === 'historial' && <HistorialIncidentes refreshSignal={realtimeRefreshKey} />}
             </div>
           </section>
         )}
