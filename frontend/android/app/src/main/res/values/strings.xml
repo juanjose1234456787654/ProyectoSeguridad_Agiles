@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Alertas UTA</string>
+    <string name="title_activity_main">Alertas UTA</string>
+    <string name="package_name">com.proyectoseguridad.agiles</string>
+    <string name="custom_url_scheme">com.proyectoseguridad.agiles</string>
+</resources>

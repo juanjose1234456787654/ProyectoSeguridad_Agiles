@@ -5,6 +5,7 @@ const { protect } = require('./middlewares/authMiddleware');
 const {
   identidadAuthProxy,
   identidadApiProxy,
+  identidadSocketProxy,
   incidentesProxy,
   incidentesSocketProxy,
   seguridadProxy,
@@ -23,6 +24,7 @@ app.use((req, _res, next) => {
 
 // Proxy de Socket.IO hacia MS-INCIDENTES
 app.use('/socket.io', incidentesSocketProxy);
+app.use('/socket-identidad', identidadSocketProxy);
 
 // Verificacion de JWT en todas las rutas (excepto /api/auth/login)
 app.use(protect);
@@ -70,6 +72,7 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`API-GATEWAY corriendo en http://localhost:${PORT}`);
   console.log(`  → /socket.io/*          MS-INCIDENTES  (:4002)`);
+  console.log(`  → /socket-identidad/*   MS-IDENTIDAD   (:4001)`);
   console.log(`  → /api/auth/*           MS-IDENTIDAD   (:4001)`);
   console.log(`  → /api/incidentes/*     MS-INCIDENTES  (:4002)`);
   console.log(`  → /api/zonas/*          MS-INCIDENTES  (:4002)`);

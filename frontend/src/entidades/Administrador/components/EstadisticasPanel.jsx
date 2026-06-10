@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
@@ -7,6 +7,102 @@ import { getEstadisticas, getHistorial } from '../services/adminService';
 import '../styles/EstadisticasPanel.css';
 
 const COLORES_PASTEL = ['#21335b', '#e53e3e', '#d69e2e', '#38a169', '#805ad5', '#3182ce', '#dd6b20'];
+const PERIODOS = [
+  { id: 'dia', label: 'Dia' }
+];
+
+const normalizarPeriodo = (periodo) => {
+  const valor = String(periodo || '').trim().toLowerCase();
+  return PERIODOS.some((item) => item.id === valor) ? valor : 'dia';
+};
+
+const parsearFecha = (registro) => {
+  const fecha = registro?.fechaCierre || registro?.fechaInicio;
+  if (!fecha) return null;
+  const parsed = new Date(fecha);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatearFechaEcuador = (fecha) => {
+  if (!fecha) return '—';
+  const parsed = new Date(fecha);
+  if (Number.isNaN(parsed.getTime())) return '—';
+  return parsed.toLocaleString('es-EC', { timeZone: 'America/Guayaquil' });
+};
+
+const inicioSemana = (fecha) => {
+  const base = new Date(fecha);
+  const dia = base.getDay();
+  const ajuste = dia === 0 ? -6 : 1 - dia;
+  base.setDate(base.getDate() + ajuste);
+  base.setHours(0, 0, 0, 0);
+  return base;
+};
+
+const coincidePeriodo = (fecha, periodo, referencia = new Date()) => {
+  const p = normalizarPeriodo(periodo);
+
+  if (p === 'dia') {
+    return fecha.toDateString() === referencia.toDateString();
+  }
+
+  if (p === 'semana') {
+    return inicioSemana(fecha).getTime() === inicioSemana(referencia).getTime();
+  }
+
+  if (p === 'mes') {
+    return fecha.getMonth() === referencia.getMonth() && fecha.getFullYear() === referencia.getFullYear();
+  }
+
+  return fecha.getFullYear() === referencia.getFullYear();
+};
+
+const getFechaMasReciente = (registros) => {
+  let fechaMasReciente = null;
+
+  registros.forEach((registro) => {
+    const fecha = parsearFecha(registro);
+    if (!fecha) return;
+    if (!fechaMasReciente || fecha > fechaMasReciente) {
+      fechaMasReciente = fecha;
+    }
+  });
+
+  return fechaMasReciente;
+};
+
+const etiquetaTemporal = (fecha, periodo) => {
+  const p = normalizarPeriodo(periodo);
+
+  if (p === 'dia') {
+    return `${String(fecha.getHours()).padStart(2, '0')}:00`;
+  }
+
+  if (p === 'semana') {
+    return fecha.toLocaleDateString('es-EC', { weekday: 'short' });
+  }
+
+  if (p === 'mes') {
+    return String(fecha.getDate()).padStart(2, '0');
+  }
+
+  return fecha.toLocaleDateString('es-EC', { month: 'short' });
+};
+
+const ordenarEtiquetas = (periodo) => (a, b) => {
+  const p = normalizarPeriodo(periodo);
+
+  if (p === 'dia') return a.localeCompare(b);
+  if (p === 'mes') return Number(a) - Number(b);
+
+  if (p === 'semana') {
+    const orden = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'];
+    return orden.indexOf(a.slice(0, 3).toLowerCase()) - orden.indexOf(b.slice(0, 3).toLowerCase());
+  }
+
+  const ordenMes = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return ordenMes.indexOf(a.slice(0, 3).toLowerCase()) - ordenMes.indexOf(b.slice(0, 3).toLowerCase());
+};
 
 const LABEL_CENTRO = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
   if (percent < 0.05) return null;
@@ -41,50 +137,110 @@ const CUSTOM_TOOLTIP_BARRA = ({ active, payload, label }) => {
   );
 };
 
-const EstadisticasPanel = () => {
+const EstadisticasPanel = ({ refreshSignal = 0 }) => {
   const [datos, setDatos] = useState(null);
   const [historial, setHistorial] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [actualizando, setActualizando] = useState(false);
   const [error, setError] = useState('');
+  const [errorAviso, setErrorAviso] = useState('');
   const [filtroMotivo, setFiltroMotivo] = useState(null);
   const [filtroZona, setFiltroZona] = useState(null);
+  const periodoTemporal = 'dia';
+  const periodoConsultaHistorial = 'anio';
+  const datosRef = useRef(null);
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    setError('');
+  useEffect(() => {
+    datosRef.current = datos;
+  }, [datos]);
+
+  const cargar = useCallback(async (periodo, { segundoPlano = false } = {}) => {
+    const hayDatosPrevios = Boolean(datosRef.current);
+    if (hayDatosPrevios && segundoPlano) {
+      setActualizando(true);
+    } else {
+      setCargando(true);
+    }
+    setErrorAviso('');
     try {
-      const [data, hist] = await Promise.all([getEstadisticas(), getHistorial()]);
+      const [data, hist] = await Promise.all([
+        getEstadisticas(),
+        getHistorial({ periodo: periodoConsultaHistorial })
+      ]);
       setDatos(data);
       setHistorial(Array.isArray(hist) ? hist : []);
+      setError('');
     } catch (e) {
-      setError(e.message || 'Error al cargar estadísticas');
+      const mensaje = e.message || 'Error al cargar estadísticas';
+      if (datosRef.current) {
+        setErrorAviso(`${mensaje}. Se mantienen los datos anteriores.`);
+      } else {
+        setError(mensaje);
+      }
     } finally {
       setCargando(false);
+      setActualizando(false);
     }
-  }, []);
+  }, [periodoConsultaHistorial]);
 
-  useEffect(() => { cargar(); }, [cargar]);
-
-  // Auto-refresh para mantener KPIs y gráficos al día sin recargar la página.
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      cargar();
-    }, 15000);
+    cargar(periodoTemporal);
+  }, [cargar, periodoTemporal]);
 
-    return () => clearInterval(intervalId);
-  }, [cargar]);
+  useEffect(() => {
+    if (!refreshSignal) return;
+    cargar(periodoTemporal, { segundoPlano: true });
+  }, [refreshSignal, cargar, periodoTemporal]);
 
-  if (cargando) return <div className="ep-loading">Cargando estadísticas…</div>;
-  if (error)    return <div className="ep-error">{error} <button onClick={cargar}>Reintentar</button></div>;
+  const periodoActivo = normalizarPeriodo(periodoTemporal);
+
+  const historialCerrados = useMemo(
+    () => historial.filter((h) => Boolean(h?.fechaCierre || h?.fechaInicio)),
+    [historial]
+  );
+
+  const fechaReferencia = useMemo(
+    () => getFechaMasReciente(historialCerrados),
+    [historialCerrados]
+  );
+
+  const historialFiltrado = useMemo(
+    () => historialCerrados.filter((h) => {
+      const fecha = parsearFecha(h);
+      return fecha && fechaReferencia ? coincidePeriodo(fecha, periodoActivo, fechaReferencia) : false;
+    }),
+    [fechaReferencia, historialCerrados, periodoActivo]
+  );
+
+  const serieTemporal = useMemo(() => {
+    const contador = new Map();
+
+    historialFiltrado.forEach((registro) => {
+      const fecha = parsearFecha(registro);
+      if (!fecha) return;
+      const etiqueta = etiquetaTemporal(fecha, periodoActivo);
+      contador.set(etiqueta, (contador.get(etiqueta) || 0) + 1);
+    });
+
+    return [...contador.entries()]
+      .sort(([a], [b]) => ordenarEtiquetas(periodoActivo)(a, b))
+      .map(([etiqueta, cantidad]) => ({ etiqueta, cantidad }));
+  }, [historialFiltrado, periodoActivo]);
+
+  const etiquetaPeriodo = fechaReferencia
+    ? `Ultimo dia con registros: ${fechaReferencia.toLocaleDateString('es-EC')}`
+    : (PERIODOS.find((p) => p.id === periodoActivo)?.label || 'Dia');
+
+  if (cargando && !datos) return <div className="ep-loading">Cargando estadísticas…</div>;
+  if (error)    return <div className="ep-error">{error} <button onClick={() => cargar(periodoTemporal)}>Reintentar</button></div>;
   if (!datos)   return null;
-
-  // Filtrado interactivo (T5.4) — solo para los gráficos, el historial es independiente
-  const hayFiltro = filtroMotivo || filtroZona;
 
   return (
     <div className="ep-root">
+      {errorAviso && <div className="ep-alerta">{errorAviso}</div>}
+
       {/* ── Tarjetas resumen ── */}
-      <div className="ep-kpis">
+      <div className={`ep-kpis ${actualizando ? 'ep-kpis--updating' : ''}`}>
         <div className="ep-kpi ep-kpi--total">
           <span className="ep-kpi__num">{datos.total}</span>
           <span className="ep-kpi__label">Total alertas</span>
@@ -100,7 +256,7 @@ const EstadisticasPanel = () => {
       </div>
 
       {/* ── Gráficos ── */}
-      <div className="ep-graficos">
+      <div className={`ep-graficos ${actualizando ? 'ep-graficos--updating' : ''}`}>
         {/* Pastel por motivo */}
         <div className="ep-card">
           <h3 className="ep-card__title">Alertas por Tipo</h3>
@@ -162,15 +318,34 @@ const EstadisticasPanel = () => {
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        <div className="ep-card ep-card--full">
+          <div className="ep-card__head">
+            <h3 className="ep-card__title">Incidentes cerrados por temporalidad</h3>
+            <span className="ep-filtro-activo">Vista del ultimo dia con registros</span>
+            {actualizando && <span className="ep-loading-inline">Actualizando...</span>}
+          </div>
+
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={serieTemporal} margin={{ top: 8, right: 16, left: -10, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="etiqueta" tick={{ fontSize: 11 }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+              <Tooltip content={<CUSTOM_TOOLTIP_BARRA />} />
+              <Bar dataKey="cantidad" radius={[6, 6, 0, 0]} fill="#1f6f8b" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       {/* ── Historial ── */}
-      <div className="ep-card ep-card--full">
+      <div className={`ep-card ep-card--full ${actualizando ? 'ep-card--updating' : ''}`}>
         <div className="ep-tabla-header">
           <h3 className="ep-card__title">Historial</h3>
+          <span className="ep-filtro-activo">Periodo: {etiquetaPeriodo}</span>
         </div>
 
-        {historial.length === 0 ? (
+        {historialFiltrado.length === 0 ? (
           <p className="ep-empty">No hay registros en el historial.</p>
         ) : (
           <div className="ep-tabla-wrap">
@@ -186,11 +361,11 @@ const EstadisticasPanel = () => {
                 </tr>
               </thead>
               <tbody>
-                {historial.map(h => (
+                {historialFiltrado.map(h => (
                   <tr key={h.id}>
                     <td className="ep-td-id">{h.id}</td>
-                    <td>{h.fechaInicio ? new Date(h.fechaInicio).toLocaleString('es-EC') : '—'}</td>
-                    <td>{h.fechaCierre ? new Date(h.fechaCierre).toLocaleString('es-EC') : '—'}</td>
+                    <td>{formatearFechaEcuador(h.fechaInicio)}</td>
+                    <td>{formatearFechaEcuador(h.fechaCierre)}</td>
                     <td>{h.resultadoGuardia || '—'}</td>
                     <td>{h.idAsignacion || '—'}</td>
                     <td className="ep-td-acciones">{h.datosJson || '—'}</td>

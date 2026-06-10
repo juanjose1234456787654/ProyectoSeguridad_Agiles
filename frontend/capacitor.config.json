@@ -1,0 +1,9 @@
+{
+  "appId": "com.proyectoseguridad.agiles",
+  "appName": "Alertas UTA",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

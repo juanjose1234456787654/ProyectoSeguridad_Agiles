@@ -8,6 +8,29 @@ const estadoGuardiaRoutes = require('./routes/estadoGuardiaRoutes');
 const asignacionAlertaRoutes = require('./routes/asignacionAlertaRoutes');
 const { testConnections, databaseNames } = require('./config/db');
 
+const defaultAllowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:4000',
+  'http://localhost',
+  'https://localhost',
+  'capacitor://localhost'
+];
+
+const envAllowedOrigins = String(process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = envAllowedOrigins.length ? envAllowedOrigins : defaultAllowedOrigins;
+
+const socketCorsOrigin = (origin, callback) => {
+  if (!origin || allowedOrigins.includes(origin)) {
+    return callback(null, true);
+  }
+
+  return callback(new Error('Origen CORS no permitido'));
+};
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -15,7 +38,7 @@ app.use(express.json());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:5173', 'http://localhost:4000'],
+    origin: socketCorsOrigin,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
   }
 });

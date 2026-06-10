@@ -1,6 +1,89 @@
 const { getDb } = require('../config/db');
+const { getDb: getEstadisticasDb } = require('../../MS-ESTADISTICAS/config/db');
 
 const db = getDb('incidentes');
+const dbEstadisticas = getEstadisticasDb('estadisticas');
+
+// Cuadrantes del campus (alineados con MapaCampus en frontend).
+const CAMPUS_LAT_N = -1.2664169;
+const CAMPUS_LAT_S = -1.2709772;
+const CAMPUS_LNG_W = -78.6263824;
+const CAMPUS_LNG_E = -78.6223047;
+const CAMPUS_LAT_M = (CAMPUS_LAT_N + CAMPUS_LAT_S) / 2;
+const CAMPUS_LNG_M = (CAMPUS_LNG_W + CAMPUS_LNG_E) / 2;
+
+const inferZonaIdByCoords = (lat, lng) => {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat >= CAMPUS_LAT_M && lng >= CAMPUS_LNG_M) return '1';
+  if (lat >= CAMPUS_LAT_M && lng < CAMPUS_LNG_M) return '2';
+  if (lat < CAMPUS_LAT_M && lng >= CAMPUS_LNG_M) return '3';
+  return '4';
+};
+
+const normalizarZonaId = (idZona) => {
+  if (idZona === undefined || idZona === null) return null;
+  const raw = String(idZona).trim().toLowerCase();
+  if (!raw) return null;
+
+  if (raw === 'z1' || raw === 'zona1' || raw === 'zona 1') return '1';
+  if (raw === 'z2' || raw === 'zona2' || raw === 'zona 2') return '2';
+  if (raw === 'z3' || raw === 'zona3' || raw === 'zona 3') return '3';
+  if (raw === 'z4' || raw === 'zona4' || raw === 'zona 4') return '4';
+
+  if (raw === '1' || raw === '2' || raw === '3' || raw === '4') return raw;
+  return String(idZona).trim();
+};
+
+const ensureDefaultZonas = async () => {
+  try {
+    const [rows] = await db.query('SELECT COUNT(*) AS total FROM ZONAS');
+    const total = Number(rows?.[0]?.total || 0);
+    if (total > 0) return;
+
+    await db.query(
+      `INSERT INTO ZONAS (ID_ZON, NOM_ZON, COO_POL_ZONX, COO_POL_ZONY)
+       VALUES
+        ('1', 'Zona1', -1.267556975, -78.623324125),
+        ('2', 'Zona2', -1.267556975, -78.625362975),
+        ('3', 'Zona3', -1.269837125, -78.623324125),
+        ('4', 'Zona4', -1.269837125, -78.625362975)`
+    );
+
+    console.log('[Incidente] Tabla ZONAS estaba vacia. Se insertaron zonas base 1..4.');
+  } catch (e) {
+    console.warn('[Incidente] No se pudieron inicializar zonas base:', e.message);
+  }
+};
+
+const backfillZonaEnIncidentes = async () => {
+  try {
+    await db.query(
+      `UPDATE INCIDENTES
+       SET ID_ZON_PER = CASE
+         WHEN LAT_INC >= ? AND LNG_INC >= ? THEN '1'
+         WHEN LAT_INC >= ? AND LNG_INC <  ? THEN '2'
+         WHEN LAT_INC <  ? AND LNG_INC >= ? THEN '3'
+         ELSE '4'
+       END
+       WHERE ID_ZON_PER IS NULL
+         AND LAT_INC IS NOT NULL
+         AND LNG_INC IS NOT NULL`,
+      [CAMPUS_LAT_M, CAMPUS_LNG_M, CAMPUS_LAT_M, CAMPUS_LNG_M, CAMPUS_LAT_M, CAMPUS_LNG_M]
+    );
+  } catch (e) {
+    console.warn('[Incidente] No se pudo completar backfill de zonas en INCIDENTES:', e.message);
+  }
+};
+
+const initZonasYBackfill = async () => {
+  try {
+    await ensureDefaultZonas();
+    await backfillZonaEnIncidentes();
+  } catch (e) {
+    console.warn('[Incidente] Inicializacion de zonas incompleta:', e.message);
+  }
+};
+initZonasYBackfill();
 
 // Añadir columna FEC_INI_INC a INCIDENTES si no existe (para registrar fecha/hora de la alerta)
 const ensureFechaInicioColumn = async () => {
@@ -56,10 +139,11 @@ const getNextIncidenteId = async () => {
 };
 
 const getNextHistorialId = async () => {
-  const [rows] = await db.query(
+  const [rows] = await dbEstadisticas.query(
     `SELECT
-      COALESCE(MAX(CAST(SUBSTRING(ID_HIS, 4, LEN(ID_HIS) - 3) AS INT)), 0) AS maxId
-    FROM [BD_ESTADISTICAS].dbo.HISTORIAL`
+      COALESCE(MAX(TRY_CAST(SUBSTRING(ID_HIS, 4, LEN(ID_HIS) - 3) AS INT)), 0) AS maxId
+    FROM [BD_ESTADISTICAS].dbo.HISTORIAL
+    WHERE ID_HIS LIKE 'HIS%'`
   );
   const next = Number(rows[0]?.maxId || 0) + 1;
   return `HIS${String(next).padStart(2, '0')}`;
@@ -67,7 +151,69 @@ const getNextHistorialId = async () => {
 
 const toSqlDateTime = (value) => {
   const d = value ? new Date(value) : new Date();
-  return d.toISOString().slice(0, 19).replace('T', ' ');
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Guayaquil',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+
+  const parts = formatter.formatToParts(d);
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second}`;
+};
+
+const PERIODOS_VALIDOS = new Set(['dia', 'semana', 'mes', 'anio']);
+
+const normalizarPeriodo = (periodo) => {
+  const valor = String(periodo || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  return PERIODOS_VALIDOS.has(valor) ? valor : 'mes';
+};
+
+const calcularRangoPeriodo = (periodo) => {
+  const ahora = new Date();
+  const inicio = new Date(ahora);
+  const fin = new Date(ahora);
+
+  if (periodo === 'dia') {
+    inicio.setHours(0, 0, 0, 0);
+    fin.setHours(23, 59, 59, 999);
+    return { inicio: toSqlDateTime(inicio), fin: toSqlDateTime(fin) };
+  }
+
+  if (periodo === 'semana') {
+    const dia = ahora.getDay();
+    const ajuste = dia === 0 ? -6 : 1 - dia;
+    inicio.setDate(ahora.getDate() + ajuste);
+    inicio.setHours(0, 0, 0, 0);
+    fin.setTime(inicio.getTime());
+    fin.setDate(inicio.getDate() + 6);
+    fin.setHours(23, 59, 59, 999);
+    return { inicio: toSqlDateTime(inicio), fin: toSqlDateTime(fin) };
+  }
+
+  if (periodo === 'anio') {
+    inicio.setMonth(0, 1);
+    inicio.setHours(0, 0, 0, 0);
+    fin.setMonth(11, 31);
+    fin.setHours(23, 59, 59, 999);
+    return { inicio: toSqlDateTime(inicio), fin: toSqlDateTime(fin) };
+  }
+
+  inicio.setDate(1);
+  inicio.setHours(0, 0, 0, 0);
+  fin.setMonth(inicio.getMonth() + 1, 0);
+  fin.setHours(23, 59, 59, 999);
+  return { inicio: toSqlDateTime(inicio), fin: toSqlDateTime(fin) };
 };
 
 const getFechaInicioIncidente = async (idIncidente) => {
@@ -370,12 +516,14 @@ const Incidente = {
     const fechaInicio = await getFechaInicioIncidente(idIncidente);
     const fechaCierre = toSqlDateTime(new Date());
     const resultadoGuardia = idGuardia ? String(idGuardia).trim() : null;
-    const datosJsonValue = acciones ? JSON.stringify({ acciones }) : null;
+    // sqlcmd parsing of -Q breaks when the query contains embedded JSON quotes.
+    // Persist the action detail as plain text in DATOS_JSON to keep compatibility.
+    const datosJsonValue = acciones ? String(acciones) : null;
 
     console.log(`[saveHistorialCierre] Insertando: id=${idHistorial} ini=${fechaInicio} cie=${fechaCierre} gua=${resultadoGuardia} asi=${idAsignacion}`);
 
-    await db.query(
-      `INSERT INTO [BD_ESTADISTICAS].dbo.HISTORIAL
+    await dbEstadisticas.query(
+      `INSERT INTO HISTORIAL
         (ID_HIS, FEC_INI_HIS, FEC_CIE_HIS, RES_GUA_HIS, ID_ASI_REF, DATOS_JSON)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [idHistorial, fechaInicio, fechaCierre, resultadoGuardia, idAsignacion, datosJsonValue]);
@@ -399,21 +547,22 @@ const Incidente = {
     const lngNum = Number(lng);
     const latSafe = Number.isFinite(latNum) ? latNum : null;
     const lngSafe = Number.isFinite(lngNum) ? lngNum : null;
+    const zonaFinal = normalizarZonaId(idZona) || inferZonaIdByCoords(latSafe, lngSafe);
     try {
       await db.query(
         `INSERT INTO INCIDENTES (ID_INC, MOT_INC, EST_INC, ID_ZON_PER, ID_USU_REF, FEC_INI_INC, LAT_INC, LNG_INC)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, motivo, estado, idZona, idUsuario, fechaInicio, latSafe, lngSafe]
+        [id, motivo, estado, zonaFinal, idUsuario, fechaInicio, latSafe, lngSafe]
       );
     } catch {
       // Fallback: columna FEC_INI_INC aún no existe
       await db.query(
         `INSERT INTO INCIDENTES (ID_INC, MOT_INC, EST_INC, ID_ZON_PER, ID_USU_REF)
          VALUES (?, ?, ?, ?, ?)`,
-        [id, motivo, estado, idZona, idUsuario]
+        [id, motivo, estado, zonaFinal, idUsuario]
       );
     }
-    return { id, motivo, estado, idZona, idUsuario, lat: latSafe, lng: lngSafe };
+    return { id, motivo, estado, idZona: zonaFinal, idUsuario, lat: latSafe, lng: lngSafe };
   },
 
   // Actualizar un incidente
@@ -444,22 +593,31 @@ const Incidente = {
   },
 
   // Estadísticas para Administrador (T5.1 / T5.2)
-  getEstadisticas: async () => {
+  getEstadisticas: async (periodo) => {
+    const periodoNormalizado = normalizarPeriodo(periodo);
+    const { inicio, fin } = calcularRangoPeriodo(periodoNormalizado);
+    const wherePeriodo = 'WHERE i.FEC_INI_INC BETWEEN ? AND ?';
+    const paramsPeriodo = [inicio, fin];
+
     // Totales generales
     const [totalesRows] = await db.query(
       `SELECT
         COUNT(*) AS total,
         SUM(CASE WHEN EST_INC = 'Cerrado' THEN 1 ELSE 0 END) AS cerradas,
         SUM(CASE WHEN EST_INC = 'Activo'  THEN 1 ELSE 0 END) AS activas
-       FROM INCIDENTES`
+       FROM INCIDENTES i
+       ${wherePeriodo}`,
+      paramsPeriodo
     );
 
     // Agrupado por motivo (todos los incidentes)
     const [porMotivoRows] = await db.query(
       `SELECT MOT_INC AS motivo, COUNT(*) AS cantidad
-       FROM INCIDENTES
+       FROM INCIDENTES i
+       ${wherePeriodo}
        GROUP BY MOT_INC
-       ORDER BY cantidad DESC`
+       ORDER BY cantidad DESC`,
+      paramsPeriodo
     );
 
     // Agrupado por zona (todos los incidentes)
@@ -469,8 +627,10 @@ const Incidente = {
         COUNT(*) AS cantidad
        FROM INCIDENTES i
        LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
+       ${wherePeriodo}
        GROUP BY z.NOM_ZON
-       ORDER BY cantidad DESC`
+       ORDER BY cantidad DESC`,
+      paramsPeriodo
     );
 
     // Últimas 10 alertas cerradas con detalle
@@ -486,7 +646,9 @@ const Incidente = {
        LEFT JOIN ZONAS z ON z.ID_ZON = i.ID_ZON_PER
        LEFT JOIN [BD_IDENTIDAD].dbo.USUARIOS u ON u.ID_USU = i.ID_USU_REF
        WHERE i.EST_INC = 'Cerrado'
-       ORDER BY i.ID_INC DESC`
+         AND i.FEC_INI_INC BETWEEN ? AND ?
+       ORDER BY i.ID_INC DESC`,
+      paramsPeriodo
     );
 
     const { total, cerradas, activas } = totalesRows[0] || { total: 0, cerradas: 0, activas: 0 };

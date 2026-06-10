@@ -174,6 +174,10 @@ body:has(.da-shell) #root {
   min-width: 0;  width: 100%;  overflow: hidden;
 }
 
+.da-main--panel {
+  background: #f0f2f8;
+}
+
 /* ── SECCIÓN MAPA (parte superior) ──────────────────────────────────────── */
 .da-mapa-section {
   background: #fff;
@@ -487,6 +491,10 @@ body:has(.da-shell) #root {
   background: #f0f2f8;
 }
 
+.da-panel-section--full {
+  height: 100%;
+}
+
 .da-panel-tabs {
   display: flex;
   gap: 0.25rem;
@@ -520,6 +528,11 @@ body:has(.da-shell) #root {
   flex: 1;
   overflow-y: auto;
   padding: 1.1rem 1.2rem;
+}
+
+.da-panel-content--full {
+  height: 100%;
+  padding: 1rem;
 }
 
 @media (max-width: 900px) {

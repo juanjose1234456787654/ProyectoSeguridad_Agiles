@@ -254,6 +254,7 @@
 .dg-main__title {
 	margin: 0;
 	font-size: 1.3rem;
+	color: #21335b;
 }
 
 .dg-main__header-right {
@@ -283,6 +284,20 @@
 	border: none;
 	border-radius: 4px;
 	cursor: pointer;
+}
+
+.dg-main__history {
+	padding: 0.6rem 1rem;
+	background: #21335b;
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.dg-main__history:hover {
+	background: #1a2947;
 }
 
 .dg-main__estado {

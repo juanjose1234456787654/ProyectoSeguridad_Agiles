@@ -10,7 +10,15 @@ const ROLES = [
   { codigo: 'ROL05', nombre: 'Personal' }
 ];
 
-const GestionUsuarios = () => {
+const esBloqueado = (valor) => {
+  if (typeof valor === 'boolean') return valor;
+  if (typeof valor === 'number') return valor === 1;
+
+  const normalizado = String(valor || '').trim().toLowerCase();
+  return normalizado === '1' || normalizado === 'true';
+};
+
+const GestionUsuarios = ({ refreshSignal = 0 }) => {
   const [usuarios, setUsuarios] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
@@ -24,7 +32,14 @@ const GestionUsuarios = () => {
     setError('');
     try {
       const data = await getUsuarios();
-      setUsuarios(Array.isArray(data) ? data : []);
+      setUsuarios(
+        Array.isArray(data)
+          ? data.map((u) => ({
+            ...u,
+            bloqueado: esBloqueado(u.bloqueado ?? u.bloqueadoRaw)
+          }))
+          : []
+      );
     } catch (e) {
       setError(e.message || 'Error al cargar usuarios');
     } finally {
@@ -34,16 +49,10 @@ const GestionUsuarios = () => {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Auto-refresh para reflejar cambios de otros clientes sin recargar la página.
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      if (!editando && !guardando) {
-        cargar();
-      }
-    }, 15000);
-
-    return () => clearInterval(intervalId);
-  }, [cargar, editando, guardando]);
+    if (!refreshSignal || editando || guardando) return;
+    cargar();
+  }, [refreshSignal, editando, guardando, cargar]);
 
   const mostrarAviso = (msg) => {
     setAviso(msg);
@@ -68,9 +77,10 @@ const GestionUsuarios = () => {
   };
 
   const toggleBloqueo = async (u) => {
+    const bloqueadoActual = esBloqueado(u.bloqueado);
     try {
-      await bloquearUsuario(u.id, !u.bloqueado);
-      mostrarAviso(`Usuario ${u.bloqueado ? 'desbloqueado' : 'bloqueado'} correctamente.`);
+      await bloquearUsuario(u.id, !bloqueadoActual);
+      mostrarAviso(`Usuario ${bloqueadoActual ? 'desbloqueado' : 'bloqueado'} correctamente.`);
       await cargar();
     } catch (e) {
       mostrarAviso(`Error: ${e.message}`);

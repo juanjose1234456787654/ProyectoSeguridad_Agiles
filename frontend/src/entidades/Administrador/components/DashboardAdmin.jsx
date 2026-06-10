@@ -8,13 +8,16 @@ import { getGuardiasEstado } from '../services/adminService';
 import GestionUsuarios from './GestionUsuarios';
 import GuardiasEstado from './GuardiasEstado';
 import EstadisticasPanel from './EstadisticasPanel';
+import HistorialIncidentes from '../../Historial/components/HistorialIncidentes';
+import { SOCKET_INCIDENTES_URL, SOCKET_SEGURIDAD_URL } from '../../../config/endpoints';
 import '../styles/DashboardAdmin.css';
 
 const SECCIONES_MENU = [
   { id: 'mapa', label: 'Mapa y Alertas' },
   { id: 'usuarios', label: 'Gestión de Usuarios' },
   { id: 'guardias', label: 'Gestión de Guardias' },
-  { id: 'estadisticas', label: 'Estadísticas' }
+  { id: 'estadisticas', label: 'Estadísticas' },
+  { id: 'historial', label: 'Historial de Incidentes' }
 ];
 
 const esEnServicio = (estado) => {
@@ -61,7 +64,7 @@ const nombreGuardiaAsignado = (alerta) => {
 };
 
 const DashboardAdmin = () => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const [alertasActivas, setAlertasActivas] = useState([]);
   const [zonasApi, setZonasApi] = useState([]);
@@ -75,8 +78,11 @@ const DashboardAdmin = () => {
   const [asignandoGuardiaId, setAsignandoGuardiaId] = useState(null);
   const [confirmacionAsignacion, setConfirmacionAsignacion] = useState(null);
   const [guardiaRefreshKey, setGuardiaRefreshKey] = useState(0);
+  const [realtimeRefreshKey, setRealtimeRefreshKey] = useState(0);
+  const [usuariosRefreshKey, setUsuariosRefreshKey] = useState(0);
   const socketRef = useRef(null);
   const socketSeguridadRef = useRef(null);
+  const socketIdentidadRef = useRef(null);
 
   const cargarAlertas = async () => {
     try {
@@ -93,7 +99,12 @@ const DashboardAdmin = () => {
   }, []);
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:4000', { transports: ['websocket'] });
+    if (!user?.token) return undefined;
+
+    socketRef.current = io(SOCKET_INCIDENTES_URL, {
+      transports: ['websocket'],
+      auth: { token: user.token }
+    });
 
     socketRef.current.on('incidente:creado', (payload) => {
       if (!payload) return;
@@ -101,21 +112,29 @@ const DashboardAdmin = () => {
         const existe = prev.some(a => a.id === payload.id);
         return existe ? prev : [...prev, payload];
       });
+      setRealtimeRefreshKey((k) => k + 1);
     });
 
     socketRef.current.on('incidente:cerrado', (payload) => {
       if (!payload) return;
       setAlertasActivas(prev => prev.filter(a => a.id !== payload.id));
+      setRealtimeRefreshKey((k) => k + 1);
     });
 
-    socketRef.current.on('incidente:actualizado', () => { cargarAlertas(); });
+    socketRef.current.on('incidente:actualizado', () => {
+      cargarAlertas();
+      setRealtimeRefreshKey((k) => k + 1);
+    });
 
     return () => socketRef.current?.disconnect();
-  }, []);
+  }, [user?.token]);
 
   useEffect(() => {
-    socketSeguridadRef.current = io('http://localhost:4003', {
-      transports: ['websocket']
+    if (!user?.token) return undefined;
+
+    socketSeguridadRef.current = io(SOCKET_SEGURIDAD_URL, {
+      transports: ['websocket'],
+      auth: { token: user.token }
     });
     socketSeguridadRef.current.on('connect', () => {
       console.log('[SOCKET SEGURIDAD] conectado al admin');
@@ -135,7 +154,27 @@ const DashboardAdmin = () => {
       }
     });
     return () => socketSeguridadRef.current?.disconnect();
-  }, [panelGuardiasAbierto]);
+  }, [panelGuardiasAbierto, user?.token]);
+
+  useEffect(() => {
+    if (!user?.token) return undefined;
+
+    socketIdentidadRef.current = io(SOCKET_INCIDENTES_URL, {
+      path: '/socket-identidad',
+      transports: ['websocket'],
+      auth: { token: user.token }
+    });
+
+    const onUsuarioChange = () => {
+      setUsuariosRefreshKey((k) => k + 1);
+    };
+
+    socketIdentidadRef.current.on('usuario:actualizado', onUsuarioChange);
+    socketIdentidadRef.current.on('usuario:bloqueado', onUsuarioChange);
+    socketIdentidadRef.current.on('usuario:eliminado', onUsuarioChange);
+
+    return () => socketIdentidadRef.current?.disconnect();
+  }, [user?.token]);
 
   useEffect(() => {
     setPanelGuardiasAbierto(false);
@@ -290,6 +329,26 @@ const DashboardAdmin = () => {
     if (!sidebarAbierto) setSidebarAbierto(true);
   };
 
+  const renderSeccionActiva = () => {
+    if (seccionActiva === 'usuarios') {
+      return <GestionUsuarios refreshSignal={usuariosRefreshKey} />;
+    }
+
+    if (seccionActiva === 'guardias') {
+      return <GuardiasEstado refreshKey={guardiaRefreshKey} />;
+    }
+
+    if (seccionActiva === 'estadisticas') {
+      return <EstadisticasPanel refreshSignal={realtimeRefreshKey} />;
+    }
+
+    if (seccionActiva === 'historial') {
+      return <HistorialIncidentes refreshSignal={realtimeRefreshKey} embedded />;
+    }
+
+    return null;
+  };
+
   return (
     <div className="da-shell">
 
@@ -337,9 +396,10 @@ const DashboardAdmin = () => {
       </aside>
 
       {/* ─── CONTENIDO PRINCIPAL ───────────────────────────────────────── */}
-      <main className="da-main">
+      <main className={`da-main ${seccionActiva === 'mapa' ? '' : 'da-main--panel'}`}>
 
-        <section className={`da-mapa-section ${seccionActiva === 'mapa' ? 'da-mapa-section--full' : ''}`}>
+        {seccionActiva === 'mapa' && (
+        <section className="da-mapa-section da-mapa-section--full">
           <div className="da-mapa-header">
             <div>
               <h1 className="da-mapa-title">Campus UTA - Monitoreo en Tiempo Real</h1>
@@ -388,25 +448,12 @@ const DashboardAdmin = () => {
             </div>
           </div>
         </section>
+        )}
 
         {seccionActiva !== 'mapa' && (
-          <section className="da-panel-section">
-            <div className="da-panel-tabs">
-              {SECCIONES_MENU.filter(s => s.id !== 'mapa').map(s => (
-                <button
-                  key={s.id}
-                  className={`da-panel-tab ${seccionActiva === s.id ? 'da-panel-tab--active' : ''}`}
-                  onClick={() => setSeccionActiva(s.id)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="da-panel-content">
-              {seccionActiva === 'usuarios' && <GestionUsuarios />}
-              {seccionActiva === 'guardias' && <GuardiasEstado refreshKey={guardiaRefreshKey} />}
-              {seccionActiva === 'estadisticas' && <EstadisticasPanel />}
+          <section className="da-panel-section da-panel-section--full">
+            <div className="da-panel-content da-panel-content--full">
+              {renderSeccionActiva()}
             </div>
           </section>
         )}

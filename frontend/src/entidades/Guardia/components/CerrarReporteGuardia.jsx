@@ -62,10 +62,15 @@ const CerrarReporteGuardia = () => {
 		try {
 			setEnviando(true);
 			setError('');
-			await guardiaService.cerrarReporte(idIncidente, acciones);
+			const result = await guardiaService.cerrarReporte(idIncidente, acciones);
+			if (!result?.historial?.saved) {
+				setError(result?.historial?.reason || 'El caso se cerró, pero no se pudo guardar en HISTORIAL');
+				return;
+			}
 			navigate('/guardia');
 		} catch (err) {
-			const message = err?.response?.data?.message || 'No se pudo cerrar el reporte';
+			const historialReason = err?.response?.data?.historial?.reason;
+			const message = historialReason || err?.response?.data?.message || 'No se pudo cerrar el reporte';
 			setError(message);
 		} finally {
 			setEnviando(false);

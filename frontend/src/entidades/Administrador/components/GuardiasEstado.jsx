@@ -68,12 +68,6 @@ const GuardiasEstado = ({ refreshKey = 0 }) => {
     if (refreshKey > 0) cargar();
   }, [refreshKey, cargar]);
 
-  // Auto-refresh cada 15 segundos (fallback por si el socket falla)
-  useEffect(() => {
-    const intervalo = setInterval(() => { cargar(); }, 15000);
-    return () => clearInterval(intervalo);
-  }, [cargar]);
-
   const guardiasFiltrados = guardias.filter(g => {
     if (filtro === 'enServicio') return esEnServicio(g.estado);
     if (filtro === 'noServicio') return !esEnServicio(g.estado);
