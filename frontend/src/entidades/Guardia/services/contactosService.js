@@ -1,7 +1,8 @@
 import axios from 'axios';
 import authService from '../../../auth/login/services/authService';
+import { API_BASE_URL } from '../../../config/endpoints';
 
-const API_BASE = 'http://localhost:4000/api/contactos';
+const API_BASE = `${API_BASE_URL}/contactos`;
 
 const headers = () => ({ headers: authService.getAuthHeader() });
 

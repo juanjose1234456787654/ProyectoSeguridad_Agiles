@@ -1,10 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getHistorialDetallado } from '../services/historialService';
 import '../styles/HistorialIncidentes.css';
 
 const TAMANO_PAGINA = 8;
+
+const formatearFechaInput = (fecha) => {
+  const year = fecha.getFullYear();
+  const month = String(fecha.getMonth() + 1).padStart(2, '0');
+  const day = String(fecha.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getRangoMesActual = () => {
+  const ahora = new Date();
+  const inicio = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+  const fin = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0);
+
+  return {
+    desde: formatearFechaInput(inicio),
+    hasta: formatearFechaInput(fin)
+  };
+};
+
+const RANGO_MES_ACTUAL = getRangoMesActual();
 
 const formatearFecha = (fecha) => {
   if (!fecha) return '—';
@@ -36,12 +55,14 @@ const getPagesToRender = (page, totalPages) => {
   return pages;
 };
 
-const HistorialIncidentes = ({ refreshSignal = 0 }) => {
+const HistorialIncidentes = ({ refreshSignal = 0, embedded = false }) => {
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const [busquedaInput, setBusquedaInput] = useState('');
   const [busquedaActiva, setBusquedaActiva] = useState('');
+  const [fechaDesdeInput, setFechaDesdeInput] = useState(RANGO_MES_ACTUAL.desde);
+  const [fechaHastaInput, setFechaHastaInput] = useState(RANGO_MES_ACTUAL.hasta);
+  const [rangoActivo, setRangoActivo] = useState(RANGO_MES_ACTUAL);
   const [pagina, setPagina] = useState(1);
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: TAMANO_PAGINA, total: 0, totalPages: 0 });
@@ -49,7 +70,12 @@ const HistorialIncidentes = ({ refreshSignal = 0 }) => {
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
 
-  const cargar = async ({ search = busquedaActiva, page = pagina } = {}) => {
+  const cargar = async ({
+    search = busquedaActiva,
+    page = pagina,
+    desde = rangoActivo.desde,
+    hasta = rangoActivo.hasta
+  } = {}) => {
     setCargando(true);
     setAviso('');
     if (!items.length) {
@@ -57,7 +83,13 @@ const HistorialIncidentes = ({ refreshSignal = 0 }) => {
     }
 
     try {
-      const response = await getHistorialDetallado({ q: search, page, limit: TAMANO_PAGINA });
+      const response = await getHistorialDetallado({
+        q: search,
+        page,
+        limit: TAMANO_PAGINA,
+        desde,
+        hasta
+      });
       setItems(Array.isArray(response?.items) ? response.items : []);
       setPagination(response?.pagination || { page, limit: TAMANO_PAGINA, total: 0, totalPages: 0 });
       setError('');
@@ -76,11 +108,11 @@ const HistorialIncidentes = ({ refreshSignal = 0 }) => {
   useEffect(() => {
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busquedaActiva, pagina]);
+  }, [busquedaActiva, pagina, rangoActivo.desde, rangoActivo.hasta]);
 
   useEffect(() => {
     if (!refreshSignal) return;
-    cargar({ search: busquedaActiva, page: pagina });
+    cargar({ search: busquedaActiva, page: pagina, desde: rangoActivo.desde, hasta: rangoActivo.hasta });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal]);
 
@@ -91,25 +123,30 @@ const HistorialIncidentes = ({ refreshSignal = 0 }) => {
   const onSubmit = (e) => {
     e.preventDefault();
     const cleaned = busquedaInput.trim();
+    if (fechaDesdeInput && fechaHastaInput && fechaDesdeInput > fechaHastaInput) {
+      setAviso('La fecha inicial no puede ser mayor que la fecha final.');
+      return;
+    }
+
     setPagina(1);
+    setAviso('');
     setBusquedaActiva(cleaned);
+    setRangoActivo({ desde: fechaDesdeInput, hasta: fechaHastaInput });
   };
 
   const onLimpiar = () => {
     setBusquedaInput('');
+    setFechaDesdeInput(RANGO_MES_ACTUAL.desde);
+    setFechaHastaInput(RANGO_MES_ACTUAL.hasta);
     setPagina(1);
+    setAviso('');
     setBusquedaActiva('');
+    setRangoActivo(RANGO_MES_ACTUAL);
   };
-
-  const volver = () => {
-    navigate(user?.rol === 'Guardia' ? '/guardia' : '/admin');
-  };
-
-  const tituloRol = user?.rol === 'Guardia' ? 'Guardia de Seguridad' : 'Administrador';
 
   if (cargando && !items.length) {
     return (
-      <section className="hi-shell">
+      <section className={`hi-shell ${embedded ? 'hi-shell--embedded' : ''}`}>
         <div className="hi-loading">Cargando historial de incidentes...</div>
       </section>
     );
@@ -117,15 +154,12 @@ const HistorialIncidentes = ({ refreshSignal = 0 }) => {
 
   if (error && !items.length) {
     return (
-      <section className="hi-shell">
+      <section className={`hi-shell ${embedded ? 'hi-shell--embedded' : ''}`}>
         <div className="hi-error-panel">
           <h2>No se pudo cargar el historial</h2>
           <p>{error}</p>
           <button type="button" className="hi-btn hi-btn--primary" onClick={() => cargar({ search: busquedaActiva, page: pagina })}>
             Reintentar
-          </button>
-          <button type="button" className="hi-btn hi-btn--ghost" onClick={volver}>
-            Volver
           </button>
         </div>
       </section>
@@ -133,40 +167,56 @@ const HistorialIncidentes = ({ refreshSignal = 0 }) => {
   }
 
   return (
-    <section className="hi-shell">
-      <div className="hi-card">
+    <section className={`hi-shell ${embedded ? 'hi-shell--embedded' : ''}`}>
+      <div className={`hi-card ${embedded ? 'hi-card--embedded' : ''}`}>
         <header className="hi-header">
           <div>
-            <p className="hi-kicker">{tituloRol}</p>
             <h1 className="hi-title">Historial de Incidentes</h1>
-            <p className="hi-subtitle">Consulta cronológica de casos cerrados con búsqueda y paginación.</p>
-          </div>
-
-          <div className="hi-header__actions">
-            <span className="hi-role-pill">{user?.rol || 'Usuario'}</span>
-            <button type="button" className="hi-btn hi-btn--ghost" onClick={volver}>
-              Volver
-            </button>
           </div>
         </header>
 
         <form className="hi-filters" onSubmit={onSubmit}>
-          <label className="hi-search">
-            <span className="hi-search__label">Buscar</span>
-            <input
-              type="text"
-              value={busquedaInput}
-              onChange={(e) => setBusquedaInput(e.target.value)}
-              placeholder="ID, motivo, zona, usuario o resolución"
-            />
-          </label>
+          <div className="hi-search-group">
+            <label className="hi-search hi-search--grow">
+              <span className="hi-search__label">Buscar</span>
+              <input
+                type="text"
+                value={busquedaInput}
+                onChange={(e) => setBusquedaInput(e.target.value)}
+                placeholder="ID, motivo, zona, usuario o resolución"
+              />
+            </label>
+
+            <button type="button" className="hi-btn hi-btn--ghost hi-btn--compact" onClick={onLimpiar}>
+              Limpiar
+            </button>
+          </div>
+
+          <div className="hi-date-range">
+            <label className="hi-search hi-search--compact">
+              <span className="hi-search__label">Desde</span>
+              <input
+                type="date"
+                value={fechaDesdeInput}
+                onChange={(e) => setFechaDesdeInput(e.target.value)}
+                max={fechaHastaInput || undefined}
+              />
+            </label>
+
+            <label className="hi-search hi-search--compact">
+              <span className="hi-search__label">Hasta</span>
+              <input
+                type="date"
+                value={fechaHastaInput}
+                onChange={(e) => setFechaHastaInput(e.target.value)}
+                min={fechaDesdeInput || undefined}
+              />
+            </label>
+          </div>
 
           <div className="hi-filters__actions">
             <button type="submit" className="hi-btn hi-btn--primary">
               Buscar
-            </button>
-            <button type="button" className="hi-btn hi-btn--ghost" onClick={onLimpiar}>
-              Limpiar
             </button>
           </div>
         </form>
@@ -175,9 +225,8 @@ const HistorialIncidentes = ({ refreshSignal = 0 }) => {
 
         <div className="hi-meta">
           <span>{totalRegistros} incidentes encontrados</span>
-          <span>
-            Página {pagination.page || 1} de {totalPages || 1}
-          </span>
+          <span>{rangoActivo.desde || rangoActivo.hasta ? `Rango: ${rangoActivo.desde || 'inicio'} a ${rangoActivo.hasta || 'hoy'}` : 'Rango: todos los cierres'}</span>
+          <span>Página {pagination.page || 1} de {totalPages || 1}</span>
         </div>
 
         {cargando && items.length > 0 && <div className="hi-alert hi-alert--info">Actualizando historial...</div>}

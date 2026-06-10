@@ -9,6 +9,7 @@ import GestionUsuarios from './GestionUsuarios';
 import GuardiasEstado from './GuardiasEstado';
 import EstadisticasPanel from './EstadisticasPanel';
 import HistorialIncidentes from '../../Historial/components/HistorialIncidentes';
+import { SOCKET_INCIDENTES_URL, SOCKET_SEGURIDAD_URL } from '../../../config/endpoints';
 import '../styles/DashboardAdmin.css';
 
 const SECCIONES_MENU = [
@@ -100,7 +101,7 @@ const DashboardAdmin = () => {
   useEffect(() => {
     if (!user?.token) return undefined;
 
-    socketRef.current = io('http://localhost:4000', {
+    socketRef.current = io(SOCKET_INCIDENTES_URL, {
       transports: ['websocket'],
       auth: { token: user.token }
     });
@@ -131,7 +132,7 @@ const DashboardAdmin = () => {
   useEffect(() => {
     if (!user?.token) return undefined;
 
-    socketSeguridadRef.current = io('http://localhost:4003', {
+    socketSeguridadRef.current = io(SOCKET_SEGURIDAD_URL, {
       transports: ['websocket'],
       auth: { token: user.token }
     });
@@ -158,7 +159,7 @@ const DashboardAdmin = () => {
   useEffect(() => {
     if (!user?.token) return undefined;
 
-    socketIdentidadRef.current = io('http://localhost:4000', {
+    socketIdentidadRef.current = io(SOCKET_INCIDENTES_URL, {
       path: '/socket-identidad',
       transports: ['websocket'],
       auth: { token: user.token }
@@ -328,6 +329,26 @@ const DashboardAdmin = () => {
     if (!sidebarAbierto) setSidebarAbierto(true);
   };
 
+  const renderSeccionActiva = () => {
+    if (seccionActiva === 'usuarios') {
+      return <GestionUsuarios refreshSignal={usuariosRefreshKey} />;
+    }
+
+    if (seccionActiva === 'guardias') {
+      return <GuardiasEstado refreshKey={guardiaRefreshKey} />;
+    }
+
+    if (seccionActiva === 'estadisticas') {
+      return <EstadisticasPanel refreshSignal={realtimeRefreshKey} />;
+    }
+
+    if (seccionActiva === 'historial') {
+      return <HistorialIncidentes refreshSignal={realtimeRefreshKey} embedded />;
+    }
+
+    return null;
+  };
+
   return (
     <div className="da-shell">
 
@@ -375,9 +396,10 @@ const DashboardAdmin = () => {
       </aside>
 
       {/* ─── CONTENIDO PRINCIPAL ───────────────────────────────────────── */}
-      <main className="da-main">
+      <main className={`da-main ${seccionActiva === 'mapa' ? '' : 'da-main--panel'}`}>
 
-        <section className={`da-mapa-section ${seccionActiva === 'mapa' ? 'da-mapa-section--full' : ''}`}>
+        {seccionActiva === 'mapa' && (
+        <section className="da-mapa-section da-mapa-section--full">
           <div className="da-mapa-header">
             <div>
               <h1 className="da-mapa-title">Campus UTA - Monitoreo en Tiempo Real</h1>
@@ -426,26 +448,12 @@ const DashboardAdmin = () => {
             </div>
           </div>
         </section>
+        )}
 
         {seccionActiva !== 'mapa' && (
-          <section className="da-panel-section">
-            <div className="da-panel-tabs">
-              {SECCIONES_MENU.filter(s => s.id !== 'mapa').map(s => (
-                <button
-                  key={s.id}
-                  className={`da-panel-tab ${seccionActiva === s.id ? 'da-panel-tab--active' : ''}`}
-                  onClick={() => setSeccionActiva(s.id)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="da-panel-content">
-              {seccionActiva === 'usuarios' && <GestionUsuarios refreshSignal={usuariosRefreshKey} />}
-              {seccionActiva === 'guardias' && <GuardiasEstado refreshKey={guardiaRefreshKey} />}
-              {seccionActiva === 'estadisticas' && <EstadisticasPanel refreshSignal={realtimeRefreshKey} />}
-              {seccionActiva === 'historial' && <HistorialIncidentes refreshSignal={realtimeRefreshKey} />}
+          <section className="da-panel-section da-panel-section--full">
+            <div className="da-panel-content da-panel-content--full">
+              {renderSeccionActiva()}
             </div>
           </section>
         )}

@@ -1,9 +1,10 @@
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import authService from '../../../auth/login/services/authService';
+import { API_BASE_URL, SOCKET_INCIDENTES_URL } from '../../../config/endpoints';
 
-const API_BASE = 'http://localhost:4000/api';
-const SOCKET_URL = 'http://localhost:4000';
+const API_BASE = API_BASE_URL;
+const SOCKET_URL = SOCKET_INCIDENTES_URL;
 
 const getAuthHeaders = () => ({
 	headers: authService.getAuthHeader()

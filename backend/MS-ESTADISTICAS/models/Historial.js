@@ -40,7 +40,7 @@ const Historial = {
     return rows;
   },
 
-  findDetailed: async ({ search = '', page = 1, limit = 8 } = {}) => {
+  findDetailed: async ({ search = '', page = 1, limit = 8, desde = null, hasta = null } = {}) => {
     const termino = normalizarTexto(search);
     const pagina = Math.max(1, Number(page) || 1);
     const tamano = Math.max(1, Math.min(50, Number(limit) || 8));
@@ -48,6 +48,16 @@ const Historial = {
 
     const filtros = ['h.FEC_CIE_HIS IS NOT NULL'];
     const params = [];
+
+    if (desde) {
+      filtros.push('h.FEC_CIE_HIS >= ?');
+      params.push(desde);
+    }
+
+    if (hasta) {
+      filtros.push('h.FEC_CIE_HIS <= ?');
+      params.push(hasta);
+    }
 
     if (termino) {
       const like = `%${escapeLike(termino)}%`;

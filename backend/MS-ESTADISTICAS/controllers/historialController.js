@@ -60,6 +60,12 @@ const calcularRango = (periodo) => {
   return { inicio, fin };
 };
 
+const parseDateParam = (value, endOfDay = false) => {
+  if (!value) return null;
+  const parsed = new Date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const getAll = async (req, res) => {
   try {
     const periodo = normalizarPeriodo(req.query?.periodo || req.query?.temporalidad);
@@ -74,8 +80,29 @@ const getAll = async (req, res) => {
 
 const getDetallado = async (req, res) => {
   try {
-    const { q = '', page = 1, limit = 8 } = req.query || {};
-    const resultado = await Historial.findDetailed({ search: q, page, limit });
+    const { q = '', page = 1, limit = 8, desde = '', hasta = '' } = req.query || {};
+    const fechaDesde = parseDateParam(desde, false);
+    const fechaHasta = parseDateParam(hasta, true);
+
+    if (desde && !fechaDesde) {
+      return res.status(400).json({ message: 'La fecha inicial es invalida' });
+    }
+
+    if (hasta && !fechaHasta) {
+      return res.status(400).json({ message: 'La fecha final es invalida' });
+    }
+
+    if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+      return res.status(400).json({ message: 'La fecha inicial no puede ser mayor que la fecha final' });
+    }
+
+    const resultado = await Historial.findDetailed({
+      search: q,
+      page,
+      limit,
+      desde: fechaDesde,
+      hasta: fechaHasta
+    });
     res.json(resultado);
   } catch (error) {
     console.error(error);

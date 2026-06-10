@@ -160,17 +160,12 @@ const DashboardGuardia = () => {
 	};
 
 	const fromMapa = location.state?.from === 'mapa';
-	const irAHistorial = () => navigate('/historial-incidentes');
-
 	return (
 		<div className={`dg-shell dg-screen-enter ${fromMapa ? 'dg-screen-enter--from-left' : 'dg-screen-enter--from-right'}`}>
 			<section className="dg-unified-card">
 				<header className="dg-unified-card__header">
 					<div>
 						<h1 className="dg-main__title">Panel de Guardia · Alertas de Usuario</h1>
-						<p className="dg-alertas-main-panel__desc">
-							Seleccione una alerta para abrir el mapa. Todo se gestiona desde este mismo contenedor.
-						</p>
 					</div>
 					<div className="dg-main__header-right">
 						<div className="dg-main__service-toggle">
@@ -197,9 +192,6 @@ const DashboardGuardia = () => {
 								{guardandoEstado && !enServicio ? 'Guardando...' : 'No en Servicio'}
 							</label>
 						</div>
-						<button type="button" className="dg-main__history" onClick={irAHistorial}>
-							Historial
-						</button>
 						<button onClick={logout} className="dg-main__logout">Salir</button>
 					</div>
 				</header>

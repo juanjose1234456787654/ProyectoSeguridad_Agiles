@@ -3,7 +3,9 @@
  * Llamadas al API para el panel de Administrador (HU-5)
  */
 
-const API = 'http://localhost:4000/api';
+import { API_BASE_URL } from '../../../config/endpoints';
+
+const API = API_BASE_URL;
 
 const getToken = () => {
   try {

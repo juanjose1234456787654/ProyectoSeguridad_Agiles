@@ -16,7 +16,6 @@ const AlertasUsuario = () => {
 	const { user, logout } = useAuth();
 
 	const [motivo, setMotivo] = useState('Robo');
-	const [estado, setEstado] = useState('Inactivo');
 	const [ultimaAlerta, setUltimaAlerta] = useState(null);
 
 	// Estado de notificaciones push/sonoras (HU-4)
@@ -212,7 +211,6 @@ const AlertasUsuario = () => {
 				const esMiAlerta = normalizarId(payload.idUsuario) === normalizarId(user.id);
 				if (esMiAlerta) {
 					setUltimaAlerta(payloadNormalizado);
-					setEstado('Activo');
 					setMisAlertas((prev) => {
 						const soloMias = filtrarAlertasDelUsuario(prev);
 						const existe = soloMias.some(a => a.id === payload.id);
@@ -284,7 +282,6 @@ const AlertasUsuario = () => {
 			});
 
 			setUltimaAlerta(nueva);
-			setEstado('Activo');
 			// NO agregar aquí - dejar que el socket notifique a través de incidente:creado
 			// esto evita duplicación cuando el servidor emite el evento
 			setNotice('Alerta registrada correctamente.');
@@ -438,13 +435,13 @@ const AlertasUsuario = () => {
 					</label>
 
 					<label>
-						Zona
+						Zona 
 						<select
 							value={motivo}
 							onChange={() => {}}
 							disabled
 						>
-							<option value="">Campus UTA – Ver mapa arriba</option>
+							<option value="">Zona disponible para guardias</option>
 						</select>
 					</label>
 				</div>
@@ -484,7 +481,6 @@ const AlertasUsuario = () => {
 				</div>
 
 				<footer className="status-row">
-					<p><strong>Estado:</strong> {estado}</p>
 					<p><strong>Ubicación:</strong> Campus UTA – Huachi, Ambato</p>
 				</footer>
 			</section>

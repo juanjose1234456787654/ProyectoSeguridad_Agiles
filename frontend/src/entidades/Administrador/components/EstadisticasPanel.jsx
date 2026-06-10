@@ -3,20 +3,17 @@ import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
-import { getEstadisticasPorPeriodo, getHistorial } from '../services/adminService';
+import { getEstadisticas, getHistorial } from '../services/adminService';
 import '../styles/EstadisticasPanel.css';
 
 const COLORES_PASTEL = ['#21335b', '#e53e3e', '#d69e2e', '#38a169', '#805ad5', '#3182ce', '#dd6b20'];
 const PERIODOS = [
-  { id: 'dia', label: 'Dia' },
-  { id: 'semana', label: 'Semana' },
-  { id: 'mes', label: 'Mes' },
-  { id: 'anio', label: 'Anio' }
+  { id: 'dia', label: 'Dia' }
 ];
 
 const normalizarPeriodo = (periodo) => {
   const valor = String(periodo || '').trim().toLowerCase();
-  return PERIODOS.some((item) => item.id === valor) ? valor : 'mes';
+  return PERIODOS.some((item) => item.id === valor) ? valor : 'dia';
 };
 
 const parsearFecha = (registro) => {
@@ -42,23 +39,36 @@ const inicioSemana = (fecha) => {
   return base;
 };
 
-const coincidePeriodo = (fecha, periodo) => {
-  const ahora = new Date();
+const coincidePeriodo = (fecha, periodo, referencia = new Date()) => {
   const p = normalizarPeriodo(periodo);
 
   if (p === 'dia') {
-    return fecha.toDateString() === ahora.toDateString();
+    return fecha.toDateString() === referencia.toDateString();
   }
 
   if (p === 'semana') {
-    return inicioSemana(fecha).getTime() === inicioSemana(ahora).getTime();
+    return inicioSemana(fecha).getTime() === inicioSemana(referencia).getTime();
   }
 
   if (p === 'mes') {
-    return fecha.getMonth() === ahora.getMonth() && fecha.getFullYear() === ahora.getFullYear();
+    return fecha.getMonth() === referencia.getMonth() && fecha.getFullYear() === referencia.getFullYear();
   }
 
-  return fecha.getFullYear() === ahora.getFullYear();
+  return fecha.getFullYear() === referencia.getFullYear();
+};
+
+const getFechaMasReciente = (registros) => {
+  let fechaMasReciente = null;
+
+  registros.forEach((registro) => {
+    const fecha = parsearFecha(registro);
+    if (!fecha) return;
+    if (!fechaMasReciente || fecha > fechaMasReciente) {
+      fechaMasReciente = fecha;
+    }
+  });
+
+  return fechaMasReciente;
 };
 
 const etiquetaTemporal = (fecha, periodo) => {
@@ -136,7 +146,8 @@ const EstadisticasPanel = ({ refreshSignal = 0 }) => {
   const [errorAviso, setErrorAviso] = useState('');
   const [filtroMotivo, setFiltroMotivo] = useState(null);
   const [filtroZona, setFiltroZona] = useState(null);
-  const [periodoTemporal, setPeriodoTemporal] = useState('mes');
+  const periodoTemporal = 'dia';
+  const periodoConsultaHistorial = 'anio';
   const datosRef = useRef(null);
 
   useEffect(() => {
@@ -153,8 +164,8 @@ const EstadisticasPanel = ({ refreshSignal = 0 }) => {
     setErrorAviso('');
     try {
       const [data, hist] = await Promise.all([
-        getEstadisticasPorPeriodo({ periodo }),
-        getHistorial({ periodo })
+        getEstadisticas(),
+        getHistorial({ periodo: periodoConsultaHistorial })
       ]);
       setDatos(data);
       setHistorial(Array.isArray(hist) ? hist : []);
@@ -170,7 +181,7 @@ const EstadisticasPanel = ({ refreshSignal = 0 }) => {
       setCargando(false);
       setActualizando(false);
     }
-  }, []);
+  }, [periodoConsultaHistorial]);
 
   useEffect(() => {
     cargar(periodoTemporal);
@@ -188,13 +199,17 @@ const EstadisticasPanel = ({ refreshSignal = 0 }) => {
     [historial]
   );
 
-  // Filtro local como respaldo si el backend no aplica la temporalidad todavía.
+  const fechaReferencia = useMemo(
+    () => getFechaMasReciente(historialCerrados),
+    [historialCerrados]
+  );
+
   const historialFiltrado = useMemo(
     () => historialCerrados.filter((h) => {
       const fecha = parsearFecha(h);
-      return fecha ? coincidePeriodo(fecha, periodoActivo) : false;
+      return fecha && fechaReferencia ? coincidePeriodo(fecha, periodoActivo, fechaReferencia) : false;
     }),
-    [historialCerrados, periodoActivo]
+    [fechaReferencia, historialCerrados, periodoActivo]
   );
 
   const serieTemporal = useMemo(() => {
@@ -212,7 +227,9 @@ const EstadisticasPanel = ({ refreshSignal = 0 }) => {
       .map(([etiqueta, cantidad]) => ({ etiqueta, cantidad }));
   }, [historialFiltrado, periodoActivo]);
 
-  const etiquetaPeriodo = PERIODOS.find((p) => p.id === periodoActivo)?.label || 'Mes';
+  const etiquetaPeriodo = fechaReferencia
+    ? `Ultimo dia con registros: ${fechaReferencia.toLocaleDateString('es-EC')}`
+    : (PERIODOS.find((p) => p.id === periodoActivo)?.label || 'Dia');
 
   if (cargando && !datos) return <div className="ep-loading">Cargando estadísticas…</div>;
   if (error)    return <div className="ep-error">{error} <button onClick={() => cargar(periodoTemporal)}>Reintentar</button></div>;
@@ -305,18 +322,7 @@ const EstadisticasPanel = ({ refreshSignal = 0 }) => {
         <div className="ep-card ep-card--full">
           <div className="ep-card__head">
             <h3 className="ep-card__title">Incidentes cerrados por temporalidad</h3>
-            <div className="ep-periodos" role="tablist" aria-label="Filtro temporal de historial">
-              {PERIODOS.map((periodo) => (
-                <button
-                  key={periodo.id}
-                  type="button"
-                  className={`ep-periodo-btn ${periodoActivo === periodo.id ? 'is-active' : ''}`}
-                  onClick={() => setPeriodoTemporal(periodo.id)}
-                >
-                  {periodo.label}
-                </button>
-              ))}
-            </div>
+            <span className="ep-filtro-activo">Vista del ultimo dia con registros</span>
             {actualizando && <span className="ep-loading-inline">Actualizando...</span>}
           </div>
 
