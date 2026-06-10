@@ -24,3 +24,26 @@ Variables de entorno en `backend/.env`:
 Endpoint para validar conexiones:
 
 - `GET /api/db/health`
+
+## APK Android (Capacitor)
+
+El proyecto ya incluye una app Android en `frontend/android`.
+
+Pasos rapidos:
+
+1. Configurar `frontend/.env.production` con tu dominio HTTPS publico.
+2. Ejecutar en `frontend`:
+	- `npm install`
+	- `npm run build`
+	- `npm run cap:sync`
+3. Compilar APK debug en `frontend/android`:
+	- `gradlew.bat assembleDebug` (Windows)
+
+APK generado en:
+
+- `frontend/android/app/build/outputs/apk/debug/app-debug.apk`
+
+Importante para sockets en movil:
+
+- Configurar `CORS_ORIGINS` en `MS-IDENTIDAD`, `MS-INCIDENTES` y `MS-SEGURIDAD`.
+- Ejemplo: `CORS_ORIGINS=https://tu-dominio-publico,capacitor://localhost,https://localhost,http://localhost`
